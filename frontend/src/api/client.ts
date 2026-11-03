@@ -362,10 +362,11 @@ export const api = {
       body: JSON.stringify({ url }),
     }),
 
-  content: (url: string, index: number) =>
-    request<Content>(
-      `/api/books/content?url=${encodeURIComponent(url)}&index=${index}`,
-    ),
+  content: (url: string, index: number, options: { refresh?: boolean } = {}) => {
+    const params = new URLSearchParams({ url, index: String(index) })
+    if (options.refresh) params.set('refresh', '1')
+    return request<Content>(`/api/books/content?${params.toString()}`)
+  },
 
   video: (
     url: string,
@@ -399,10 +400,11 @@ export const api = {
   previewSession: (id: string) =>
     request<PreviewSession>(`/api/preview/session?id=${encodeURIComponent(id)}`),
 
-  previewContent: (id: string, index: number) =>
-    request<Content>(
-      `/api/preview/content?id=${encodeURIComponent(id)}&index=${index}`,
-    ),
+  previewContent: (id: string, index: number, options: { refresh?: boolean } = {}) => {
+    const params = new URLSearchParams({ id, index: String(index) })
+    if (options.refresh) params.set('refresh', '1')
+    return request<Content>(`/api/preview/content?${params.toString()}`)
+  },
 
   previewVideo: (
     id: string,

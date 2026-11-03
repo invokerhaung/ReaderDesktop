@@ -90,6 +90,8 @@ export interface FloatProgressMessage {
   page: number | null
   percent?: number
   chapterTitle?: string
+  /** 发送时刻（Date.now），用于过滤另一端迟到的旧进度，避免翻页被拉回。 */
+  at?: number
 }
 
 export interface FloatPrefsMessage {

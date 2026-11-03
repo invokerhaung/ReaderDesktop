@@ -59,6 +59,7 @@ let saveTimer: number | undefined
 let toastTimer: number | undefined
 let repaginateTimer: number | undefined
 let lastTurnAt = 0
+let lastLocalProgressAt = 0
 let remoteBusy = false
 let dragging = false
 
@@ -380,6 +381,8 @@ function saveProgressSoon() {
 
 function broadcastProgress() {
   if (!book.value) return
+  const at = Date.now()
+  lastLocalProgressAt = at
   const message: FloatProgressMessage = {
     type: 'progress',
     source: 'float',
@@ -391,6 +394,7 @@ function broadcastProgress() {
         ? pageIndex.value / (pages.value.length - 1)
         : 0,
     chapterTitle: chapterTitle.value,
+    at,
   }
   syncChannel?.postMessage(message)
 }
@@ -426,6 +430,8 @@ function turnPage(delta: number) {
 async function onRemoteProgress(message: FloatProgressMessage) {
   if (!book.value || message.bookUrl !== book.value.bookUrl) return
   if (remoteBusy) return
+  // 忽略主窗口迟到的旧进度，避免刚翻到下一页又被拉回上一页
+  if (message.at && message.at < lastLocalProgressAt) return
   remoteBusy = true
   try {
     if (message.index !== chapterIndex.value) {

@@ -726,10 +726,11 @@ class ApiRouter(private val context: ServerContext) {
         val book = context.bookRepo.get(bookUrl) ?: error("书籍不在书架")
         val chapter = context.bookRepo.getChapter(bookUrl, index) ?: error("章节不存在")
         val cacheKey = "$bookUrl#$index"
+        val refresh = params["refresh"]?.firstOrNull() == "1"
         val cacheEnabled = settingBool("cacheEnabled", true)
         val cacheDays = settingInt("cacheChapterDays", 30).coerceIn(1, 3650)
-        var document = contentCache[cacheKey]
-        if (document == null && cacheEnabled) {
+        var document = if (refresh) null else contentCache[cacheKey]
+        if (!refresh && document == null && cacheEnabled) {
             document = context.chapterCacheRepo.get(bookUrl, index, cacheDays)
             if (document != null) contentCache[cacheKey] = document
         }
@@ -739,8 +740,8 @@ class ApiRouter(private val context: ServerContext) {
                 runBlocking { SourceEngine(source).contentDocument(book, chapter) }
             }
             document = fetched.getOrNull()
-            if (document == null && cacheEnabled) {
-                // 网络失败时回退到过期缓存，支持离线阅读
+            if (document == null && !refresh && cacheEnabled) {
+                // 网络失败时回退到过期缓存，支持离线阅读；手动刷新失败则保留旧正文并报错
                 document = context.chapterCacheRepo.get(bookUrl, index, null)
             }
             if (document == null) {
@@ -894,8 +895,9 @@ class ApiRouter(private val context: ServerContext) {
     private fun previewContent(params: Map<String, List<String>>): ApiPayload {
         val session = skipPreview(params)
         val index = params["index"]?.firstOrNull()?.toIntOrNull() ?: 0
+        val refresh = params["refresh"]?.firstOrNull() == "1"
         val chapter = session.chapters.getOrNull(index) ?: error("章节不存在")
-        val document = session.contentCache[index] ?: run {
+        val document = (if (refresh) null else session.contentCache[index]) ?: run {
             val source = context.sourceRepo.get(session.sourceKey)
                 ?: error("书源已被删除")
             val fetched = runBlocking {

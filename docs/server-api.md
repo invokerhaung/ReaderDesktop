@@ -49,11 +49,11 @@ SQLite（`data/legado.db`，sqlite-jdbc）：
 | DELETE | `/api/books?url=` | 删除书籍与章节 |
 | GET | `/api/books/chapters?url=` | 目录；优先读库，缺失时抓取并写入 |
 | POST | `/api/books/chapters/refresh` | body `{"url":"..."}`；重新抓取全部分页目录并替换缓存，保留当前阅读章节 |
-| GET | `/api/books/content?url=&index=` | 正文；内存缓存，返回 `content` 文本与 `blocks` 结构（文本/图片），并应用替换规则。漫画书源的 `blocks` 即章节图片列表 |
+| GET | `/api/books/content?url=&index=&refresh=1` | 正文；内存缓存，返回 `content` 文本与 `blocks` 结构（文本/图片），并应用替换规则。`refresh=1` 跳过内存/磁盘缓存强制重新抓取，成功后更新缓存，失败时保留旧正文。漫画书源的 `blocks` 即章节图片列表 |
 | GET | `/api/books/video?url=&index=&resolution=&refresh=1` | 视频取流：解析 `contentRule`（单 URL / `名称::URL` / JSON resolutions），返回 `kind`（`hls`/`file`/`drm`）、`url`、`resolutions`、`defaultIndex`、`drm` |
 | POST | `/api/preview/open` | 临时试看（不写书架）：body 为搜索结果元数据（`bookUrl/sourceKey/name/...`），返回 `{id, book, chapters}`；会话仅驻内存，TTL 30 分钟 |
 | GET | `/api/preview/session?id=` | 取试看会话的书籍与目录 |
-| GET | `/api/preview/content?id=&index=` | 试看正文/图片，行为与 `/api/books/content` 一致但不落正文缓存 |
+| GET | `/api/preview/content?id=&index=&refresh=1` | 试看正文/图片，行为与 `/api/books/content` 一致但不落正文缓存；`refresh=1` 强制重新抓取。 |
 | GET | `/api/preview/video?id=&index=&resolution=&refresh=1` | 试看视频取流，结果缓存在会话内 |
 | POST | `/api/preview/close` | body `{"id":"..."}`，释放试看会话 |
 | PUT | `/api/books/progress` | body `{"url":"...","index":N,"position":可选}`；文字书 `position` 为章内千分比（0–1000，主窗口/浮窗通用），视频为毫秒，漫画为页序 |

@@ -64,6 +64,8 @@ const isPreview = computed(() => !!previewId.value)
 
 let syncChannel: BroadcastChannel | null = null
 let applyingRemote = false
+let lastLocalProgressAt = 0
+let lastRemoteApplyAt = 0
 let scrollSaveTimer: number | undefined
 
 function saveProgress(index: number, position?: number) {
@@ -84,6 +86,8 @@ function pagePercent(): number {
 
 function notifyProgress() {
   if (isPreview.value || !book.value) return
+  const at = Date.now()
+  lastLocalProgressAt = at
   const message: FloatProgressMessage = {
     type: 'progress',
     source: 'reader',
@@ -92,6 +96,7 @@ function notifyProgress() {
     page: settings.mode === 'paged' ? pageIndex.value : null,
     percent: settings.mode === 'paged' ? pagePercent() : scrollPercent(),
     chapterTitle: chapterTitle.value,
+    at,
   }
   syncChannel?.postMessage(message)
 }
@@ -107,6 +112,8 @@ function saveReadingPosition() {
 
 async function applyRemoteProgress(message: FloatProgressMessage) {
   if (isPreview.value || message.bookUrl !== bookUrl.value || applyingRemote) return
+  // 迟到的旧进度不覆盖本地刚翻到的位置
+  if (message.at && message.at < lastLocalProgressAt) return
   applyingRemote = true
   try {
     if (message.index !== currentIndex.value) {
@@ -125,8 +132,17 @@ async function applyRemoteProgress(message: FloatProgressMessage) {
         element.scrollTo({ top: message.percent * max })
       }
     }
-    saveReadingPosition()
+    // 只保存远端位置，不再回播。否则两端分页宽度不同，回传的百分比会把
+    // 刚翻到的页映射回上一页，表现为“翻页后马上回滚”。
+    const position =
+      typeof message.percent === 'number'
+        ? Math.round(message.percent * 1000)
+        : settings.mode === 'paged'
+          ? Math.round(pagePercent() * 1000)
+          : undefined
+    saveProgress(currentIndex.value, position)
   } finally {
+    lastRemoteApplyAt = Date.now()
     applyingRemote = false
   }
 }
@@ -184,6 +200,7 @@ const contentBlocks = ref<ReaderBlock[]>([])
 const loading = ref(true)
 const loadingContent = ref(false)
 const refreshingToc = ref(false)
+const refreshingChapter = ref(false)
 const error = ref('')
 const verifying = ref(false)
 
@@ -378,6 +395,45 @@ async function refreshToc() {
     showToast(e instanceof Error ? e.message : String(e))
   } finally {
     refreshingToc.value = false
+  }
+}
+
+async function refreshCurrentChapter() {
+  if (refreshingChapter.value || loadingContent.value || !currentChapter.value) return
+  const index = currentIndex.value
+  const anchor = settings.mode === 'paged' ? pagePercent() : scrollPercent()
+  refreshingChapter.value = true
+  loadingContent.value = true
+  error.value = ''
+  try {
+    const data = isPreview.value
+      ? await api.previewContent(previewId.value, index, { refresh: true })
+      : await api.content(bookUrl.value, index, { refresh: true })
+    content.value = data.content
+    contentBlocks.value = toReaderBlocks(data)
+    await nextTick()
+    if (settings.mode === 'paged') {
+      await paginate(false)
+      pageIndex.value = Math.min(
+        Math.max(Math.round(anchor * Math.max(0, pages.value.length - 1)), 0),
+        pages.value.length - 1,
+      )
+    } else {
+      await nextTick()
+      const element = scrollRef.value
+      if (element) {
+        const max = Math.max(0, element.scrollHeight - element.clientHeight)
+        element.scrollTo({ top: anchor * max })
+      }
+    }
+    saveReadingPosition()
+    showToast('本章已刷新')
+  } catch (e) {
+    // 刷新失败时保留当前正文，只提示错误
+    showToast(e instanceof Error ? e.message : String(e))
+  } finally {
+    refreshingChapter.value = false
+    loadingContent.value = false
   }
 }
 
@@ -675,6 +731,7 @@ async function selectChapter(
 }
 
 function turnPage(delta: number) {
+  if (loadingContent.value || applyingRemote) return
   if (settings.mode === 'scroll') {
     scrollRef.value?.scrollBy({ top: delta * window.innerHeight * 0.85, behavior: 'smooth' })
     return
@@ -695,6 +752,8 @@ function turnPage(delta: number) {
 }
 
 function onScroll() {
+  // 接收远端进度时程序会 scrollTo；不要把这个滚动再回播成自己的进度
+  if (applyingRemote || Date.now() - lastRemoteApplyAt < 800) return
   window.clearTimeout(scrollSaveTimer)
   scrollSaveTimer = window.setTimeout(() => {
     notifyProgress()
@@ -899,6 +958,15 @@ onBeforeUnmount(() => {
         </button>
         <button class="reader-icon" title="目录" @click="toggleToc">
           <AppIcon name="list" />
+        </button>
+        <button
+          class="reader-icon"
+          :class="{ spinning: refreshingChapter }"
+          :disabled="refreshingChapter"
+          title="刷新本章（重新抓取正文）"
+          @click="refreshCurrentChapter"
+        >
+          <AppIcon name="refresh" />
         </button>
         <button class="reader-icon" title="浮窗阅读" @click="openFloatWindow">
           <AppIcon name="float" />
