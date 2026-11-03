@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#151c26"/>
+      <stop offset="1" stop-color="#2b3443"/>
+    </linearGradient>
+    <linearGradient id="snow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dfe4ea" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#aab4c2" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="360" fill="url(#sky)"/>
+  <circle cx="640" cy="82" r="30" fill="#e8dcc8" opacity="0.75"/>
+  <path d="M0 250 L90 210 L160 240 L260 190 L350 235 L470 200 L560 240 L660 205 L800 245 L800 360 L0 360 Z" fill="url(#snow)" opacity="0.28"/>
+  <path d="M0 300 L120 270 L220 300 L340 262 L470 305 L600 275 L720 300 L800 285 L800 360 L0 360 Z" fill="#e9edf2" opacity="0.5"/>
+  <rect x="250" y="196" width="140" height="94" rx="4" fill="#1e242c"/>
+  <path d="M238 198 L320 150 L402 198 Z" fill="#303a46"/>
+  <rect x="300" y="238" width="34" height="52" fill="#0e1217"/>
+  <rect x="350" y="220" width="24" height="22" fill="#e0b46f" opacity="0.7"/>
+  <path d="M420 290 C470 250 520 310 580 255 C630 210 690 240 740 220" stroke="#d9a25e" stroke-width="2" fill="none" opacity="0.55"/>
+  <g fill="#eef2f7" opacity="0.65">
+    <circle cx="90" cy="80" r="2"/><circle cx="150" cy="120" r="1.5"/><circle cx="220" cy="60" r="2"/>
+    <circle cx="310" cy="100" r="1.5"/><circle cx="400" cy="70" r="2"/><circle cx="500" cy="110" r="1.5"/>
+    <circle cx="560" cy="50" r="2"/><circle cx="680" cy="140" r="1.5"/><circle cx="740" cy="90" r="2"/>
+    <circle cx="120" cy="200" r="1.5"/><circle cx="460" cy="150" r="2"/><circle cx="610" cy="200" r="1.5"/>
+  </g>
+</svg>

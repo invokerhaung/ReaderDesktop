@@ -1,0 +1,35 @@
+[versions]
+kotlin = "2.3.21"
+coroutines = "1.11.0"
+jsoup = "1.22.2"
+rhino = "1.9.1"
+jsonPath = "3.0.0"
+okhttp = "5.3.2"
+okio = "3.9.1"
+gson = "2.14.0"
+nanoHttpd = "2.3.1"
+hutool = "5.8.22"
+slf4j = "2.0.16"
+logback = "1.5.12"
+junit = "5.11.4"
+sqlite = "3.47.1.0"
+opencc4j = "1.14.0"
+
+[libraries]
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
+json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanoHttpd" }
+hutool-crypto = { module = "cn.hutool:hutool-crypto", version.ref = "hutool" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
+opencc4j = { module = "com.github.houbb:opencc4j", version.ref = "opencc4j" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

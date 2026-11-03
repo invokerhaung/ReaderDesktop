@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>墨读 · Legado Desktop</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9z"/></symbol>
+    <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-6"/><path d="M4.5 11.5v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16.2 16.2 4.3 4.3"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></symbol>
+    <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7"/></symbol>
+    <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9.5 5 7 7-7 7"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m5 9.5 7 7 7-7"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v2.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V16"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 16v2.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V16"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-13.7-5.3L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 13.7 5.3L20 16"/><path d="M20 20v-4h-4"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14"/><path d="M15 5v14"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12"/><path d="m18 6-12 12"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m10 7-5 5 5 5"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m14 7 5 5-5 5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3 9a14 14 0 0 1 18 0"/><path d="M6.5 12.5a9 9 0 0 1 11 0"/><path d="M10 16a4 4 0 0 1 4 0"/><circle cx="12" cy="19.2" r="1"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21l-6-4-6 4z"/></symbol>
+    <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M12 6v13"/><path d="M8 19h8"/></symbol>
+    <symbol id="i-columns" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="7" height="15" rx="1.5"/><rect x="13.5" y="4.5" width="7" height="15" rx="1.5"/></symbol>
+    <symbol id="i-toc" viewBox="0 0 24 24"><path d="M4 6h3"/><path d="M10 6h10"/><path d="M4 12h3"/><path d="M10 12h10"/><path d="M4 18h3"/><path d="M10 18h10"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 10v4h3l4 3.5v-11L7 10z"/><path d="M15 9a4 4 0 0 1 0 6"/><path d="M17.8 6.2a8 8 0 0 1 0 11.6"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 9h6v6H9z"/><path d="M9 9V7a2 2 0 1 0-2 2z"/><path d="M15 9V7a2 2 0 1 1 2 2z"/><path d="M9 15v2a2 2 0 1 1-2-2z"/><path d="M15 15v2a2 2 0 1 0 2-2z"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7 8 20h8l1.5-13"/><path d="M10 11v5"/><path d="M14 11v5"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z"/><path d="M13.5 7.5 16.5 10.5"/></symbol>
+    <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5a13 13 0 0 1 0 17"/><path d="M12 3.5a13 13 0 0 0 0 17"/></symbol>
+    <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6" rx="1.6"/><rect x="16.5" y="13.5" width="4" height="6" rx="1.6"/></symbol>
+  </svg>
+
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">墨</div>
+        <div class="brand-text">
+          <strong>墨读</strong>
+          <span>Legado Desktop</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item active" data-view="shelf">
+          <svg class="icon"><use href="#i-book"/></svg><span>书架</span><em>10</em>
+        </button>
+        <button class="nav-item" data-view="search">
+          <svg class="icon"><use href="#i-compass"/></svg><span>发现</span>
+        </button>
+        <button class="nav-item" data-view="sources">
+          <svg class="icon"><use href="#i-database"/></svg><span>书源</span><em>8</em>
+        </button>
+        <button class="nav-item" data-view="local">
+          <svg class="icon"><use href="#i-folder"/></svg><span>本地</span>
+        </button>
+        <button class="nav-item" data-view="stats">
+          <svg class="icon"><use href="#i-chart"/></svg><span>统计</span>
+        </button>
+        <div class="nav-divider"></div>
+        <button class="nav-item" data-view="settings">
+          <svg class="icon"><use href="#i-sliders"/></svg><span>设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="storage-card">
+          <div class="storage-top"><span>本地缓存</span><strong>1.2 GB</strong></div>
+          <div class="storage-bar"><i style="width:38%"></i></div>
+          <span class="storage-hint">可用 3.8 GB</span>
+        </div>
+        <button class="collapse-btn" id="collapseBtn" title="收起侧栏">
+          <svg class="icon"><use href="#i-sidebar"/></svg><span>收起侧栏</span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="crumb"><span id="crumbRoot">书架</span><i>/</i><span id="crumbSub">全部</span></div>
+        <button class="cmd-trigger" id="cmdTrigger">
+          <svg class="icon"><use href="#i-search"/></svg>
+          <span>搜索书籍、作者或命令</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <div class="top-actions">
+          <span class="pill pill-live"><i class="dot"></i>7 / 8 书源在线</span>
+          <button class="icon-btn" id="taskBtn" title="任务中心">
+            <svg class="icon"><use href="#i-clock"/></svg>
+            <i class="task-badge" id="taskBadge">3</i>
+          </button>
+          <button class="icon-btn" id="themeToggle" title="切换阅读主题">
+            <svg class="icon"><use href="#i-moon"/></svg>
+          </button>
+          <button class="icon-btn" data-view-jump="settings" title="设置">
+            <svg class="icon"><use href="#i-sliders"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="views">
+        <section class="view active" id="view-shelf">
+          <div class="view-head">
+            <div>
+              <h1>书架</h1>
+              <p>10 本 · 4 个分组 · 上次同步 2 分钟前</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn ghost" id="importBtn"><svg class="icon"><use href="#i-upload"/></svg>导入本地</button>
+              <button class="btn ghost" id="newGroupBtn"><svg class="icon"><use href="#i-plus"/></svg>新建分组</button>
+              <div class="segmented" id="viewToggle">
+                <button class="active" data-mode="grid" title="网格"><svg class="icon"><use href="#i-grid"/></svg></button>
+                <button data-mode="list" title="列表"><svg class="icon"><use href="#i-list"/></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <article class="continue-card" id="continueCard">
+            <div class="continue-bg"></div>
+            <div class="continue-info">
+              <span class="eyebrow">继续阅读</span>
+              <h2>长夜行</h2>
+              <p class="continue-chapter">第 37 章 · 风雪夜归人</p>
+              <div class="continue-progress"><i style="width:42%"></i></div>
+              <div class="continue-meta"><span>已读 42%</span><span>上次阅读 2 小时前</span></div>
+            </div>
+            <button class="btn primary continue-btn" data-open-book="changye">
+              <svg class="icon"><use href="#i-arrow-right"/></svg>继续阅读
+            </button>
+          </article>
+
+          <div class="shelf-toolbar">
+            <div class="tabs" id="groupTabs">
+              <button class="active" data-group="全部">全部</button>
+              <button data-group="在读">在读</button>
+              <button data-group="未分组">未分组</button>
+              <button data-group="已完本">已完本</button>
+            </div>
+            <button class="text-btn"><svg class="icon"><use href="#i-clock"/></svg>最近阅读</button>
+          </div>
+
+          <div class="book-grid" id="bookGrid"></div>
+        </section>
+
+        <section class="view" id="view-search">
+          <div class="view-head">
+            <div>
+              <h1>发现</h1>
+              <p>聚合全部书源，一次搜遍</p>
+            </div>
+            <span class="muted-note">8 个书源可用 · 平均响应 320ms</span>
+          </div>
+
+          <form class="search-hero" id="searchForm">
+            <svg class="icon"><use href="#i-search"/></svg>
+            <input id="searchInput" autocomplete="off" placeholder="搜索书名、作者，或粘贴书源链接" />
+            <button class="btn primary" type="submit">搜索</button>
+          </form>
+
+          <div class="search-tools">
+            <div class="chips">
+              <button class="chip active">全部书源</button>
+              <button class="chip">仅启用</button>
+              <button class="chip">主力分组</button>
+              <button class="chip">按书名合并</button>
+            </div>
+            <span class="search-status" id="searchStatus">输入关键词开始搜索</span>
+          </div>
+
+          <div class="search-progress" id="searchProgress" hidden>
+            <div class="progress-track"><i id="progressBar"></i></div>
+            <div class="progress-caption"><span id="progressLabel">正在连接书源…</span><span id="progressCount">0 / 18</span></div>
+          </div>
+
+          <div class="search-suggest" id="searchSuggest">
+            <span>试试：</span>
+            <button class="link-btn" data-kw="长夜行">长夜行</button>
+            <button class="link-btn" data-kw="星海">星海</button>
+            <button class="link-btn" data-kw="观星者">观星者</button>
+            <button class="link-btn" data-kw="风雪">风雪</button>
+          </div>
+
+          <div class="result-list" id="searchResults"></div>
+        </section>
+
+        <section class="view" id="view-sources">
+          <div class="view-head">
+            <div>
+              <h1>书源</h1>
+              <p>8 个书源 · 6 个启用 · 2 个需要验证</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn ghost" id="sourceImport"><svg class="icon"><use href="#i-upload"/></svg>导入</button>
+              <button class="btn ghost"><svg class="icon"><use href="#i-globe"/></svg>远程订阅</button>
+              <button class="btn ghost"><svg class="icon"><use href="#i-download"/></svg>导出</button>
+              <button class="btn primary"><svg class="icon"><use href="#i-plus"/></svg>新增</button>
+            </div>
+          </div>
+
+          <div class="source-layout">
+            <aside class="source-panel">
+              <div class="panel-tools">
+                <label class="mini-search"><svg class="icon"><use href="#i-search"/></svg><input id="sourceSearch" placeholder="搜索名称或 URL" /></label>
+                <button class="icon-btn small" title="筛选"><svg class="icon"><use href="#i-filter"/></svg></button>
+              </div>
+              <div class="source-list" id="sourceList"></div>
+              <div class="panel-foot"><span id="sourceCount">显示 8 / 8</span><span>平均 312ms</span></div>
+            </aside>
+
+            <section class="source-editor">
+              <header class="editor-head">
+                <div class="editor-title">
+                  <strong id="editorName">墨香居</strong>
+                  <span id="editorUrl">https://moxiang.example.com</span>
+                </div>
+                <div class="editor-actions">
+                  <span class="editor-meta" id="editorMeta">8 字段 · 2 必填</span>
+                  <div class="segmented small" id="densityToggle">
+                    <button class="active" data-density="comfortable">舒适</button>
+                    <button data-density="dense">紧凑</button>
+                  </div>
+                  <span class="pill pill-ok" id="editorStatus"><i class="dot"></i>可用 · 182ms</span>
+                  <button class="btn ghost small" id="loginSource"><svg class="icon"><use href="#i-globe"/></svg>登录</button>
+                  <label class="switch"><input type="checkbox" id="editorEnabled" checked /><span></span></label>
+                  <button class="btn ghost small" id="saveSource"><svg class="icon"><use href="#i-check"/></svg>保存</button>
+                </div>
+              </header>
+
+              <nav class="editor-tabs" id="editorTabs">
+                <button class="active" data-tab="overview">概览</button>
+                <button data-tab="search">搜索</button>
+                <button data-tab="explore">发现</button>
+                <button data-tab="detail">详情</button>
+                <button data-tab="toc">目录</button>
+                <button data-tab="content">正文</button>
+                <button data-tab="other">其他</button>
+              </nav>
+
+              <div class="editor-body" id="editorBody"></div>
+
+              <div class="test-console">
+                <header>
+                  <div class="console-title"><svg class="icon"><use href="#i-play"/></svg>测试控制台</div>
+                  <div class="console-actions">
+                    <span class="console-status" id="consoleStatus">待运行</span>
+                    <button class="btn primary small" id="runTest"><svg class="icon"><use href="#i-play"/></svg>运行测试</button>
+                  </div>
+                </header>
+                <div class="console-log" id="consoleLog"></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-local">
+          <div class="view-head">
+            <div>
+              <h1>本地</h1>
+              <p><span id="localCount">6 个文件</span> · <span id="localFormats">TXT 2 · EPUB 2 · PDF 2</span> · 不联网也能读</p>
+            </div>
+            <div class="head-actions">
+              <button class="btn ghost" id="scanLocal"><svg class="icon"><use href="#i-refresh"/></svg>扫描目录</button>
+              <button class="btn primary" id="localPick"><svg class="icon"><use href="#i-upload"/></svg>导入文件</button>
+            </div>
+          </div>
+
+          <div class="local-banner" id="dropzone">
+            <div class="local-banner-icon"><svg class="icon big"><use href="#i-upload"/></svg></div>
+            <div class="local-banner-text">
+              <strong>拖拽文件到这里导入</strong>
+              <span>支持 TXT、EPUB、PDF；单文件最大 2 GB，PDF 按页原样渲染。</span>
+            </div>
+            <button class="btn ghost" id="localPick2">浏览文件</button>
+            <input type="file" id="localInput" accept=".txt,.epub,.pdf" multiple hidden />
+          </div>
+
+          <div class="local-toolbar">
+            <div class="tabs" id="localTabs">
+              <button class="active" data-format="全部">全部</button>
+              <button data-format="TXT">TXT</button>
+              <button data-format="EPUB">EPUB</button>
+              <button data-format="PDF">PDF</button>
+            </div>
+            <span class="muted-note">按最近打开排序</span>
+          </div>
+
+          <div class="local-table">
+            <div class="local-table-head">
+              <span>书籍</span><span>格式</span><span>大小</span><span>内容</span><span>最近打开</span><span>进度</span><span></span>
+            </div>
+            <div id="localList"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-stats">
+          <div class="view-head">
+            <div><h1>统计</h1><p>最近 7 天 · 只保存在本机</p></div>
+          </div>
+          <div class="stat-cards">
+            <div class="stat-card"><span>累计阅读</span><strong>48 小时 26 分</strong><em>比上周 +12%</em></div>
+            <div class="stat-card"><span>日均</span><strong>1 小时 42 分</strong><em>最长 3 小时 08 分</em></div>
+            <div class="stat-card"><span>活跃天数</span><strong>26 天</strong><em>连续 9 天</em></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-head"><strong>每日阅读时长</strong><span>分钟</span></div>
+            <div class="chart" id="chart"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-settings">
+          <div class="view-head">
+            <div><h1>设置</h1><p>阅读、外观、存储、网络与快捷键</p></div>
+            <span class="muted-note">所有配置只保存在本机</span>
+          </div>
+          <div class="settings-layout">
+            <nav class="settings-nav" id="settingsNav">
+              <button class="active" data-panel="reading"><svg class="icon"><use href="#i-type"/></svg>阅读</button>
+              <button data-panel="appearance"><svg class="icon"><use href="#i-moon"/></svg>外观</button>
+              <button data-panel="storage"><svg class="icon"><use href="#i-database"/></svg>存储</button>
+              <button data-panel="shortcuts"><svg class="icon"><use href="#i-command"/></svg>快捷键</button>
+              <button data-panel="network"><svg class="icon"><use href="#i-globe"/></svg>网络</button>
+              <button data-panel="backup"><svg class="icon"><use href="#i-download"/></svg>备份</button>
+              <button data-panel="about"><svg class="icon"><use href="#i-book"/></svg>关于</button>
+            </nav>
+
+            <div class="settings-content">
+              <section class="settings-panel active" data-panel="reading">
+                <header class="panel-head">
+                  <div><h2>阅读</h2><p>默认排版、翻页与朗读行为</p></div>
+                  <button class="btn ghost small" id="resetReading">恢复默认</button>
+                </header>
+                <div class="settings-body split">
+                  <div class="settings-form">
+                    <div class="form-group">
+                      <h3>排版</h3>
+                      <div class="setting-row"><span>翻页模式</span><div class="segmented small" data-setting="pageMode"><button class="active" data-value="paged">横向</button><button data-value="scroll">滚动</button></div></div>
+                      <div class="setting-row"><span>正文字号</span><div class="inline-range"><input type="range" id="setFontSize" min="16" max="30" value="19" /><b id="setFontSizeVal">19 px</b></div></div>
+                      <div class="setting-row"><span>行高</span><div class="inline-range"><input type="range" id="setLineHeight" min="16" max="22" value="19" /><b id="setLineHeightVal">1.9</b></div></div>
+                      <div class="setting-row"><span>段距</span><div class="inline-range"><input type="range" id="setParaGap" min="4" max="16" value="9" /><b id="setParaGapVal">0.9 em</b></div></div>
+                      <div class="setting-row"><span>页宽</span><div class="inline-range"><input type="range" id="setPageWidth" min="620" max="880" step="20" value="720" /><b id="setPageWidthVal">720 px</b></div></div>
+                    </div>
+                    <div class="form-group">
+                      <h3>语言与朗读</h3>
+                      <div class="setting-row"><span>简繁转换</span><div class="segmented small" data-setting="chinese"><button class="active">关</button><button>简</button><button>繁</button></div></div>
+                      <div class="setting-row"><span>自动阅读间隔</span><div class="inline-range"><input type="range" min="2" max="20" value="8" data-suffix=" s" /><b>8 s</b></div></div>
+                      <div class="setting-row"><span>朗读引擎</span><select class="mini-select"><option>系统语音</option><option selected>Edge TTS · 云希</option><option>OpenAI 兼容</option></select></div>
+                    </div>
+                  </div>
+                  <aside class="reading-preview">
+                    <div class="preview-page" id="previewPage" data-theme="ink">
+                      <h4>风雪夜归人</h4>
+                      <p>雪落了一夜，青石镇的屋檐都压低了三分。</p>
+                      <p>沈砚推门进来时，肩上积着薄薄一层白。他没有抖，只把门轻轻掩上。</p>
+                      <p>灯下坐着一个人，背对着门，手里握着一卷旧书。</p>
+                      <p>书页翻得很慢，慢到能听见纸边擦过指腹的声音。</p>
+                    </div>
+                    <div class="preview-meta"><span>实时预览</span><b id="previewSpec">19 px · 1.9 · 720 px</b></div>
+                  </aside>
+                </div>
+              </section>
+
+              <section class="settings-panel" data-panel="appearance">
+                <header class="panel-head"><div><h2>外观</h2><p>阅读主题与界面行为</p></div></header>
+                <div class="settings-body">
+                  <div class="form-group">
+                    <h3>阅读主题</h3>
+                    <div class="theme-chips large" data-theme-picker>
+                      <button class="theme-chip active" data-theme="ink"><i style="background:#0f1013"></i>墨夜</button>
+                      <button class="theme-chip" data-theme="paper"><i style="background:#f4efe4"></i>纸白</button>
+                      <button class="theme-chip" data-theme="eye"><i style="background:#e9e2cf"></i>护眼</button>
+                      <button class="theme-chip" data-theme="black"><i style="background:#000"></i>纯黑</button>
+                    </div>
+                    <p class="form-note">应用外壳固定为深色；阅读区可独立切换纸白与护眼，切换后立即生效。</p>
+                  </div>
+                  <div class="form-group">
+                    <h3>界面</h3>
+                    <div class="setting-row"><span>侧栏默认展开</span><label class="switch"><input type="checkbox" checked data-toggle="侧栏展开" /><span></span></label></div>
+                    <div class="setting-row"><span>减少动效</span><label class="switch"><input type="checkbox" data-toggle="减少动效" /><span></span></label></div>
+                    <div class="setting-row"><span>界面密度</span><div class="segmented small"><button class="active">舒适</button><button>紧凑</button></div></div>
+                  </div>
+                  <div class="form-group">
+                    <h3>启动与关闭</h3>
+                    <div class="setting-row"><span>启动时打开</span><select class="mini-select"><option>书架</option><option>上次阅读</option></select></div>
+                    <div class="setting-row"><span>关闭主窗口</span><select class="mini-select"><option>最小化到托盘</option><option>退出应用</option></select></div>
+                    <div class="setting-row"><span>双击标题栏</span><select class="mini-select"><option>最大化 / 还原</option><option>无操作</option></select></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-panel" data-panel="storage">
+                <header class="panel-head"><div><h2>存储</h2><p>数据目录与本地缓存</p></div></header>
+                <div class="settings-body">
+                  <div class="form-group">
+                    <h3>位置</h3>
+                    <div class="setting-row"><span>数据目录</span><code>C:\Users\htxin\AppData\Roaming\Reader</code></div>
+                    <div class="setting-row"><span>便携模式</span><label class="switch"><input type="checkbox" data-toggle="便携模式" /><span></span></label></div>
+                  </div>
+                  <div class="form-group">
+                    <h3>缓存</h3>
+                    <div class="usage-row"><span>已用 1.2 GB / 5 GB</span><b>24%</b></div>
+                    <div class="usage-bar"><i style="width:24%"></i></div>
+                    <div class="usage-breakdown">
+                      <span><i style="background:hsl(var(--accent))"></i>章节 860 MB</span>
+                      <span><i style="background:hsl(var(--accent-2))"></i>封面 280 MB</span>
+                      <span><i style="background:hsl(var(--success))"></i>字体 40 MB</span>
+                    </div>
+                    <div class="button-row">
+                      <button class="btn ghost small" id="cleanCache">清理缓存</button>
+                      <button class="btn ghost small" id="openDataDir">打开目录</button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <h3>缓存策略</h3>
+                    <div class="setting-row"><span>自动缓存</span><div class="inline-range"><input type="range" min="10" max="200" step="10" value="50" data-suffix=" 章" /><b>50 章</b></div></div>
+                    <div class="setting-row"><span>仅 Wi-Fi 缓存</span><label class="switch"><input type="checkbox" checked data-toggle="仅 Wi-Fi 缓存" /><span></span></label></div>
+                    <div class="setting-row"><span>保留最近</span><select class="mini-select"><option>30 天</option><option selected>90 天</option><option>永久</option></select></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-panel" data-panel="shortcuts">
+                <header class="panel-head"><div><h2>快捷键</h2><p>主界面与阅读页通用</p></div></header>
+                <div class="settings-body">
+                  <div class="form-group">
+                    <h3>方案</h3>
+                    <div class="setting-row"><span>按键方案</span><select class="mini-select"><option>阅读器默认</option><option>Vim 风格</option><option>自定义</option></select></div>
+                  </div>
+                  <div class="shortcut-table">
+                    <div class="shortcut-row"><span>全局搜索 / 命令面板</span><span><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
+                    <div class="shortcut-row"><span>下一页</span><span><kbd>→</kbd><kbd>Space</kbd></span></div>
+                    <div class="shortcut-row"><span>上一页</span><span><kbd>←</kbd></span></div>
+                    <div class="shortcut-row"><span>目录</span><span><kbd>Ctrl</kbd><kbd>T</kbd></span></div>
+                    <div class="shortcut-row"><span>搜索正文</span><span><kbd>Ctrl</kbd><kbd>F</kbd></span></div>
+                    <div class="shortcut-row"><span>朗读 / 暂停</span><span><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>R</kbd></span></div>
+                    <div class="shortcut-row"><span>添加书签</span><span><kbd>Ctrl</kbd><kbd>B</kbd></span></div>
+                    <div class="shortcut-row"><span>关闭面板 / 抽屉</span><span><kbd>Esc</kbd></span></div>
+                    <div class="shortcut-row"><span>老板键</span><span><kbd>Ctrl</kbd><kbd>`</kbd></span></div>
+                  </div>
+                  <p class="form-note">在输入框内不会触发阅读快捷键。</p>
+                  <button class="btn ghost small" id="resetShortcuts">恢复默认快捷键</button>
+                </div>
+              </section>
+
+              <section class="settings-panel" data-panel="network">
+                <header class="panel-head"><div><h2>网络</h2><p>代理、超时与局域网访问</p></div></header>
+                <div class="settings-body">
+                  <div class="form-group">
+                    <h3>代理</h3>
+                    <div class="setting-row"><span>HTTP 代理</span><input class="mini-input" placeholder="http://127.0.0.1:7890" /></div>
+                    <div class="setting-row"><span>跟随系统代理</span><label class="switch"><input type="checkbox" checked data-toggle="系统代理" /><span></span></label></div>
+                    <div class="setting-row"><span>书源并发</span><div class="inline-range"><input type="range" min="1" max="10" value="4" /><b>4</b></div></div>
+                    <div class="setting-row"><span>请求超时</span><div class="inline-range"><input type="range" min="5" max="60" value="30" data-suffix=" s" /><b>30 s</b></div></div>
+                  </div>
+                  <div class="form-group">
+                    <h3>局域网访问</h3>
+                    <div class="setting-row"><span>允许手机访问</span><label class="switch"><input type="checkbox" data-toggle="局域网访问" /><span></span></label></div>
+                    <p class="form-note">开启后同网段设备可读书架与正文，无密码，请仅在可信网络使用。</p>
+                  </div>
+                  <div class="form-group">
+                    <h3>连接</h3>
+                    <div class="setting-row"><span>DNS over HTTPS</span><label class="switch"><input type="checkbox" checked data-toggle="DoH" /><span></span></label></div>
+                    <div class="setting-row"><span>HTTP/2</span><label class="switch"><input type="checkbox" checked data-toggle="HTTP/2" /><span></span></label></div>
+                    <div class="setting-row"><span>忽略证书错误</span><label class="switch"><input type="checkbox" data-toggle="忽略证书错误" /><span></span></label></div>
+                    <p class="form-note">仅对少数使用自签名证书的书源开启；会增加中间人风险。</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-panel" data-panel="backup">
+                <header class="panel-head"><div><h2>备份</h2><p>WebDAV 与本地备份</p></div></header>
+                <div class="settings-body">
+                  <div class="form-group">
+                    <h3>WebDAV</h3>
+                    <div class="setting-row"><span>服务地址</span><input class="mini-input" placeholder="https://dav.example.com/reader" /></div>
+                    <div class="setting-row"><span>账号</span><input class="mini-input" placeholder="username" /></div>
+                    <div class="setting-row"><span>应用密码</span><input class="mini-input" type="password" placeholder="••••••••" /></div>
+                    <div class="setting-row"><span>自动同步进度</span><label class="switch"><input type="checkbox" checked data-toggle="自动同步" /><span></span></label></div>
+                  </div>
+                  <div class="form-group">
+                    <h3>本地备份</h3>
+                    <div class="backup-list">
+                      <div class="backup-row">
+                        <div><strong>backup_2026-10-30.zip</strong><span>今天 09:12 · 3.8 MB · 自动</span></div>
+                        <button class="btn ghost small">恢复</button>
+                      </div>
+                      <div class="backup-row">
+                        <div><strong>backup_2026-10-23.zip</strong><span>10 月 23 日 09:12 · 3.6 MB · 自动</span></div>
+                        <button class="btn ghost small">恢复</button>
+                      </div>
+                      <div class="backup-row">
+                        <div><strong>backup_2026-10-16.zip</strong><span>10 月 16 日 09:12 · 3.5 MB · 手动</span></div>
+                        <button class="btn ghost small">恢复</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="setting-row"><span>上次备份</span><b>今天 09:12 · 3.8 MB</b></div>
+                  <div class="button-row">
+                    <button class="btn primary small" id="backupNow">立即备份</button>
+                    <button class="btn ghost small" id="restoreBackup">从备份恢复</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-panel" data-panel="about">
+                <header class="panel-head">
+                  <div><h2>关于</h2><p>版本、许可与更新</p></div>
+                  <button class="btn ghost small" id="checkUpdate">检查更新</button>
+                </header>
+                <div class="settings-body">
+                  <div class="about-card">
+                    <div class="brand-mark large">墨</div>
+                    <div>
+                      <h3>墨读 · Legado Desktop</h3>
+                      <p>版本 0.1.0 · Windows x64 · 骨架阶段</p>
+                      <p>基于 Legado 3.0 规则引擎，GPLv3 开源许可。</p>
+                    </div>
+                  </div>
+                  <div class="setting-row"><span>上游</span><code>legado@7640c219a</code></div>
+                  <div class="setting-row"><span>数据目录</span><code>C:\Users\htxin\AppData\Roaming\Reader</code></div>
+                  <div class="setting-row"><span>开源许可</span><b>GPLv3</b></div>
+                  <div class="button-row">
+                    <button class="btn ghost small" id="aboutUpdate">检查更新</button>
+                    <button class="btn ghost small" id="openProject">项目主页</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="reader" id="reader" data-theme="ink" hidden>
+    <div class="reader-top">
+      <div class="reader-left">
+        <button class="reader-icon" id="readerBack" title="返回书架"><svg class="icon"><use href="#i-arrow-left"/></svg></button>
+        <div class="reader-title"><strong id="readerBook">长夜行</strong><span id="readerChapter">第 37 章 风雪夜归人</span></div>
+      </div>
+      <div class="reader-actions">
+        <button class="reader-icon" id="tocBtn" title="目录"><svg class="icon"><use href="#i-toc"/></svg></button>
+        <button class="reader-icon" id="ttsBtn" title="朗读"><svg class="icon"><use href="#i-headphones"/></svg></button>
+        <button class="reader-icon" id="readerSettingsBtn" title="排版"><svg class="icon"><use href="#i-type"/></svg></button>
+        <button class="reader-icon" id="readerMore" title="更多"><svg class="icon"><use href="#i-more"/></svg></button>
+      </div>
+    </div>
+
+    <div class="reader-stage" id="readerStage">
+      <button class="page-zone prev" id="prevZone" aria-label="上一页"></button>
+      <div class="reader-viewport" id="readerViewport">
+        <div class="reader-pages" id="readerPages"></div>
+      </div>
+      <button class="page-zone next" id="nextZone" aria-label="下一页"></button>
+    </div>
+
+    <div class="reader-bottom">
+      <span id="readerClock">23:41</span>
+      <div class="reader-progress"><i id="readerProgressBar"></i></div>
+      <span id="pageIndicator">1 / 1</span>
+    </div>
+
+    <aside class="drawer right" id="readerSettings">
+      <header class="drawer-head"><strong>排版</strong><button class="reader-icon" data-close-drawer><svg class="icon"><use href="#i-x"/></svg></button></header>
+      <div class="drawer-body">
+        <div class="setting-block">
+          <span class="setting-label">主题</span>
+          <div class="theme-chips" data-theme-picker>
+            <button class="theme-chip active" data-theme="ink"><i style="background:#0f1013"></i>墨夜</button>
+            <button class="theme-chip" data-theme="paper"><i style="background:#f4efe4"></i>纸白</button>
+            <button class="theme-chip" data-theme="eye"><i style="background:#e9e2cf"></i>护眼</button>
+            <button class="theme-chip" data-theme="black"><i style="background:#000"></i>纯黑</button>
+          </div>
+        </div>
+        <div class="setting-block">
+          <span class="setting-label">字体</span>
+          <select id="fontFamily">
+            <option value="serif">宋体（默认）</option>
+            <option value="kai">楷体</option>
+            <option value="sans">黑体</option>
+          </select>
+        </div>
+        <div class="setting-block">
+          <div class="setting-line"><span class="setting-label">字号</span><b id="fontSizeVal">19 px</b></div>
+          <input type="range" id="fontSize" min="16" max="30" value="19" />
+        </div>
+        <div class="setting-block">
+          <div class="setting-line"><span class="setting-label">行高</span><b id="lineHeightVal">1.9</b></div>
+          <input type="range" id="lineHeight" min="16" max="22" value="19" />
+        </div>
+        <div class="setting-block">
+          <div class="setting-line"><span class="setting-label">段距</span><b id="paraGapVal">0.9 em</b></div>
+          <input type="range" id="paraGap" min="4" max="16" value="9" />
+        </div>
+        <div class="setting-block">
+          <div class="setting-line"><span class="setting-label">页宽</span><b id="pageWidthVal">720 px</b></div>
+          <input type="range" id="pageWidth" min="620" max="880" step="20" value="720" />
+        </div>
+        <div class="setting-block">
+          <span class="setting-label">翻页</span>
+          <div class="segmented" id="pageMode">
+            <button class="active" data-mode="paged"><svg class="icon"><use href="#i-columns"/></svg>横向</button>
+            <button data-mode="scroll"><svg class="icon"><use href="#i-list"/></svg>滚动</button>
+          </div>
+        </div>
+        <button class="btn ghost full" id="resetReader">恢复默认</button>
+      </div>
+    </aside>
+
+    <aside class="drawer left" id="readerToc">
+      <header class="drawer-head"><strong>导航</strong><button class="reader-icon" data-close-drawer><svg class="icon"><use href="#i-x"/></svg></button></header>
+      <div class="drawer-tabs" id="readerDrawerTabs">
+        <button class="active" data-drawer-tab="toc">目录</button>
+        <button data-drawer-tab="bookmarks">书签</button>
+        <button data-drawer-tab="search">搜索</button>
+      </div>
+      <div class="drawer-pane" data-pane="toc">
+        <div class="toc-search"><svg class="icon"><use href="#i-search"/></svg><input id="tocSearch" placeholder="查找章节" /></div>
+        <div class="toc-list" id="tocList"></div>
+      </div>
+      <div class="drawer-pane" data-pane="bookmarks" hidden>
+        <div class="bookmark-list" id="bookmarkList"></div>
+      </div>
+      <div class="drawer-pane" data-pane="search" hidden>
+        <div class="toc-search"><svg class="icon"><use href="#i-search"/></svg><input id="bookSearchInput" placeholder="搜索本章或全书" /></div>
+        <div class="book-search-results" id="bookSearchResults"></div>
+      </div>
+    </aside>
+
+    <div class="reader-menu" id="readerMenu" hidden>
+      <button data-menu="bookmark"><svg class="icon"><use href="#i-bookmark"/></svg>添加书签</button>
+      <button data-menu="cache"><svg class="icon"><use href="#i-download"/></svg>缓存本章</button>
+      <button data-menu="switch"><svg class="icon"><use href="#i-refresh"/></svg>换源</button>
+      <button data-menu="search"><svg class="icon"><use href="#i-search"/></svg>搜索正文</button>
+    </div>
+
+    <div class="tts-bar" id="ttsBar" hidden>
+      <button class="tts-play" id="ttsPlay"><svg class="icon"><use href="#i-pause"/></svg></button>
+      <div class="tts-info"><strong>正在朗读</strong><span>第 37 章 · 第 4 段</span></div>
+      <div class="tts-progress"><i></i></div>
+      <select id="ttsSpeed"><option>0.8x</option><option selected>1.0x</option><option>1.25x</option><option>1.5x</option></select>
+      <span class="tts-voice">云希 · 自然</span>
+      <button class="reader-icon" id="ttsClose"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+
+    <div class="selection-toolbar" id="selectionToolbar" hidden>
+      <button data-sel="copy">复制</button>
+      <button data-sel="search">搜索</button>
+      <button data-sel="bookmark">书签</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="cmdPalette" hidden>
+    <div class="palette" role="dialog" aria-modal="true" aria-label="命令面板">
+      <div class="palette-input">
+        <svg class="icon"><use href="#i-command"/></svg>
+        <input id="cmdInput" placeholder="输入命令或搜索…" autocomplete="off" />
+        <kbd>Esc</kbd>
+      </div>
+      <div class="palette-list" id="cmdList"></div>
+      <div class="palette-foot">↑↓ 选择 · Enter 执行 · Esc 关闭</div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay" hidden>
+    <div class="modal" id="modalBox" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-head">
+        <div><h2 id="modalTitle"></h2><p id="modalSubtitle"></p></div>
+        <button class="icon-btn" id="modalClose" aria-label="关闭"><svg class="icon"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="modal-body" id="modalBody"></div>
+      <footer class="modal-foot" id="modalFoot"></footer>
+    </div>
+  </div>
+
+  <div class="panel-scrim" id="panelScrim" hidden></div>
+  <aside class="side-panel" id="sidePanel" hidden aria-label="详情面板">
+    <header class="side-panel-head">
+      <h2 id="panelTitle"></h2>
+      <button class="icon-btn" id="panelClose" aria-label="关闭"><svg class="icon"><use href="#i-x"/></svg></button>
+    </header>
+    <div class="side-panel-body" id="panelBody"></div>
+  </aside>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

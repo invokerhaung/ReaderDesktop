@@ -1,0 +1,56 @@
+# --- Gradle / Kotlin ---
+.gradle/
+.kotlin/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# --- IDE ---
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.fleet/
+
+# --- Node / Vite ---
+node_modules/
+frontend/node_modules/
+desktop/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# --- Tauri / Rust ---
+desktop/src-tauri/target/
+desktop/src-tauri/gen/schemas/
+desktop/src-tauri/runtime/
+desktop/src-tauri/server/
+desktop/src-tauri/frontend/
+desktop/src-tauri/bundle/
+
+# --- 运行时数据与日志 ---
+/data/
+/runtime/
+/logs/
+*.log
+*.db
+*.db-wal
+*.db-shm
+*.hprof
+/tmp/
+*.pid
+
+# --- 本地环境与密钥 ---
+.env
+.env.*
+!.env.example
+
+# --- 本地规划 ---
+/PLAN.md
+
+# --- 系统 ---
+.DS_Store
+Thumbs.db
+desktop.ini

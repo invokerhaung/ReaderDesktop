@@ -1,0 +1,16 @@
+Legado Desktop
+Copyright (C) 2026 Legado Desktop contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+Source code in this repository is derived from Legado
+(https://github.com/gedoor/legado), licensed under GPLv3.
+Upstream snapshot: commit 7640c219a. See docs/upstream.md.

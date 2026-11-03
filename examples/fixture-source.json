@@ -1,0 +1,28 @@
+{
+  "bookSourceUrl": "http://127.0.0.1:8099",
+  "bookSourceName": "本地 Fixture",
+  "searchUrl": "http://127.0.0.1:8099/search.html?q={{key}}",
+  "ruleSearch": {
+    "bookList": "class.result@tag.li",
+    "name": "tag.a@text",
+    "author": "class.author@text",
+    "bookUrl": "tag.a@href",
+    "intro": "class.intro@text",
+    "coverUrl": "class.cover@src"
+  },
+  "ruleBookInfo": {
+    "name": "tag.h1@text",
+    "author": "class.author@text",
+    "intro": "class.intro@text",
+    "tocUrl": "class.toc@href",
+    "coverUrl": "class.cover@src"
+  },
+  "ruleToc": {
+    "chapterList": "class.chapters@tag.li",
+    "chapterName": "tag.a@text",
+    "chapterUrl": "tag.a@href"
+  },
+  "ruleContent": {
+    "content": "class.content@html"
+  }
+}
