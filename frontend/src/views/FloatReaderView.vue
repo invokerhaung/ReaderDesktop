@@ -60,6 +60,7 @@ let toastTimer: number | undefined
 let repaginateTimer: number | undefined
 let lastTurnAt = 0
 let lastLocalProgressAt = 0
+let suppressRemoteUntil = 0
 let remoteBusy = false
 let dragging = false
 
@@ -262,9 +263,15 @@ async function loadChapter(
   options: { page?: number | null; percent?: number | null; notify?: boolean } = {},
 ) {
   if (!book.value || index < 0 || index >= chapters.value.length) return
+  const local = options.notify !== false
   chapterIndex.value = index
   loadingContent.value = true
   loadError.value = ''
+  if (local) {
+    // 本地切章：立刻同步目录，并在加载期间拒绝另一端的旧章节进度
+    suppressRemoteUntil = Date.now() + 1200
+    broadcastChapterStart(index)
+  }
   try {
     const data = await api.content(book.value.bookUrl, index)
     contentBlocks.value = textBlocks(data)
@@ -379,7 +386,7 @@ function saveProgressSoon() {
   }, 260)
 }
 
-function broadcastProgress() {
+function postProgress(index: number, page: number, percent: number, title: string) {
   if (!book.value) return
   const at = Date.now()
   lastLocalProgressAt = at
@@ -387,16 +394,27 @@ function broadcastProgress() {
     type: 'progress',
     source: 'float',
     bookUrl: book.value.bookUrl,
-    index: chapterIndex.value,
-    page: pageIndex.value,
-    percent:
-      pages.value.length > 1
-        ? pageIndex.value / (pages.value.length - 1)
-        : 0,
-    chapterTitle: chapterTitle.value,
+    index,
+    page,
+    percent,
+    chapterTitle: title,
     at,
   }
   syncChannel?.postMessage(message)
+}
+
+function broadcastProgress() {
+  postProgress(
+    chapterIndex.value,
+    pageIndex.value,
+    pages.value.length > 1 ? pageIndex.value / (pages.value.length - 1) : 0,
+    chapterTitle.value,
+  )
+}
+
+/** 章节切换一开始就通知主窗口，让目录/当前章节立即跟随；正文仍在加载。 */
+function broadcastChapterStart(index: number) {
+  postProgress(index, 0, 0, chapters.value[index]?.title ?? book.value?.name ?? '')
 }
 
 function afterChange() {
@@ -429,7 +447,9 @@ function turnPage(delta: number) {
 
 async function onRemoteProgress(message: FloatProgressMessage) {
   if (!book.value || message.bookUrl !== book.value.bookUrl) return
-  if (remoteBusy) return
+  if (remoteBusy || loadingContent.value) return
+  // 本地切章期间，主窗口旧的“当前章节”进度不能把浮窗拉回去
+  if (Date.now() < suppressRemoteUntil) return
   // 忽略主窗口迟到的旧进度，避免刚翻到下一页又被拉回上一页
   if (message.at && message.at < lastLocalProgressAt) return
   remoteBusy = true

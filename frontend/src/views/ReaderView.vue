@@ -112,6 +112,8 @@ function saveReadingPosition() {
 
 async function applyRemoteProgress(message: FloatProgressMessage) {
   if (isPreview.value || message.bookUrl !== bookUrl.value || applyingRemote) return
+  // 本地正在切章/排版时，不接收另一端的进度
+  if (loadingContent.value) return
   // 迟到的旧进度不覆盖本地刚翻到的位置
   if (message.at && message.at < lastLocalProgressAt) return
   applyingRemote = true
