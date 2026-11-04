@@ -232,11 +232,12 @@ class AnalyzeUrl(
         jsStr: String? = null,
         sourceRegex: String? = null,
         useWebView: Boolean = true,
+        allowVisibleChallenge: Boolean = true,
     ): StrResponse {
         getByteArrayIfDataUri()?.let {
             return StrResponse(url, decode(it, null))
         }
-        if (this.useWebView && useWebView) {
+        if (this.useWebView && useWebView && allowVisibleChallenge) {
             fetchWithWebView(jsStr, sourceRegex)?.let { html ->
                 return StrResponse(url, html)
             }
@@ -248,7 +249,7 @@ class AnalyzeUrl(
         var challengeTried = false
         if (method == RequestMethod.GET && WebviewHosts.isMarked(url)) {
             challengeTried = true
-            fetchWithWebViewChallenge()?.let { html ->
+            fetchWithWebViewChallenge(allowVisibleChallenge)?.let { html ->
                 return StrResponse(url, html)
             }
         }
@@ -269,7 +270,7 @@ class AnalyzeUrl(
                             webViewFallbackTried = true
                             if (method == RequestMethod.GET && !challengeTried) {
                                 challengeTried = true
-                                fetchWithWebViewChallenge()?.let { html ->
+                                fetchWithWebViewChallenge(allowVisibleChallenge)?.let { html ->
                                     return@withContext StrResponse(url, html)
                                 }
                             }
@@ -284,7 +285,7 @@ class AnalyzeUrl(
                     // TLS/连接被站点拒绝（指纹风控）时，同样回退到 WebView 渲染
                     if (method == RequestMethod.GET && !challengeTried) {
                         challengeTried = true
-                        fetchWithWebViewChallenge()?.let { html ->
+                        fetchWithWebViewChallenge(allowVisibleChallenge)?.let { html ->
                             return@withContext StrResponse(url, html)
                         }
                     }
@@ -299,8 +300,9 @@ class AnalyzeUrl(
         jsStr: String? = null,
         sourceRegex: String? = null,
         useWebView: Boolean = true,
+        allowVisibleChallenge: Boolean = true,
     ): StrResponse = runBlocking(coroutineContext) {
-        getStrResponseAwait(jsStr, sourceRegex, useWebView)
+        getStrResponseAwait(jsStr, sourceRegex, useWebView, allowVisibleChallenge)
     }
 
     private fun buildRequest(): Request {
@@ -372,15 +374,21 @@ class AnalyzeUrl(
         val timeoutMs: Long,
     )
 
-    private fun fetchWithWebViewChallenge(): String? {
+    private fun fetchWithWebViewChallenge(allowVisible: Boolean = true): String? {
         val bridge = CookieBridgeHolder.bridge?.takeIf { it.isAvailable() } ?: return null
-        // 先用隐藏窗口自动尝试；最后一步打开可见窗口，必要时由用户点一次验证
-        val attempts = listOf(
-            // 先给隐藏窗口两次自动过挑战的机会；失败后必须把复用窗口显示出来让用户点验证
-            ChallengeAttempt(4_000L, visible = false, fallbackMs = 20_000L, timeoutMs = 30_000L),
-            ChallengeAttempt(8_000L, visible = false, fallbackMs = 20_000L, timeoutMs = 30_000L),
-            ChallengeAttempt(0L, visible = true, fallbackMs = 180_000L, timeoutMs = 200_000L),
-        )
+        // 自动预取只做一次隐藏尝试，绝不弹可见验证窗口；手动缓存/正文加载才允许可见挑战
+        val attempts = if (allowVisible) {
+            listOf(
+                // 先给隐藏窗口两次自动过挑战的机会；失败后必须把复用窗口显示出来让用户点验证
+                ChallengeAttempt(4_000L, visible = false, fallbackMs = 20_000L, timeoutMs = 30_000L),
+                ChallengeAttempt(8_000L, visible = false, fallbackMs = 20_000L, timeoutMs = 30_000L),
+                ChallengeAttempt(0L, visible = true, fallbackMs = 180_000L, timeoutMs = 200_000L),
+            )
+        } else {
+            listOf(
+                ChallengeAttempt(4_000L, visible = false, fallbackMs = 10_000L, timeoutMs = 15_000L),
+            )
+        }
         for (attempt in attempts) {
             val started = System.currentTimeMillis()
             val result = runCatching {

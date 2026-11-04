@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api, type Book, type Bookmark, type Chapter, type Content } from '../api/client'
+import {
+  api,
+  type Book,
+  type Bookmark,
+  type Chapter,
+  type ChapterCacheJob,
+  type Content,
+} from '../api/client'
 import { imageSrc } from '../api/cover'
 import { FLOAT_SYNC_CHANNEL, type FloatProgressMessage } from '../api/floatReader'
 import AppIcon from '../components/AppIcon.vue'
@@ -205,6 +212,12 @@ const refreshingToc = ref(false)
 const refreshingChapter = ref(false)
 const error = ref('')
 const verifying = ref(false)
+const showCacheDialog = ref(false)
+const cacheStart = ref(1)
+const cacheEnd = ref(1)
+const cacheJob = ref<ChapterCacheJob | null>(null)
+const cacheStarting = ref(false)
+let cachePollTimer: number | undefined
 
 const settings = reactive<ReaderSettings>(loadSettings())
 const showToc = ref(false)
@@ -343,9 +356,121 @@ function openDrawer(tab: 'toc' | 'bookmarks' | 'search') {
   drawerTab.value = tab
   showToc.value = true
   showSettings.value = false
+  if (tab === 'toc') void loadCachedFlags()
   if (tab === 'bookmarks') void loadBookmarks()
   if (tab === 'search') void nextTick(() => searchInput.value?.focus())
 }
+
+async function loadCachedFlags() {
+  if (isPreview.value || !bookUrl.value || !chapters.value.length) return
+  try {
+    const result = await api.cachedChapters(bookUrl.value)
+    const cached = new Set(result.cached)
+    chapters.value = chapters.value.map((chapter) => {
+      const value = cached.has(chapter.index)
+      return chapter.cached === value ? chapter : { ...chapter, cached: value }
+    })
+  } catch {
+    // 目录缓存状态失败不影响阅读
+  }
+}
+
+function openCacheDialog() {
+  if (isPreview.value) {
+    showToast('试看模式不支持缓存章节')
+    return
+  }
+  if (!chapters.value.length) return
+  showCacheDialog.value = true
+  if (cacheJob.value && (cacheJob.value.state === 'running' || cacheJob.value.state === 'cancelling')) {
+    void pollCache()
+    return
+  }
+  cacheJob.value = null
+  cacheStart.value = currentIndex.value + 1
+  cacheEnd.value = chapters.value.length
+}
+
+function closeCacheDialog() {
+  showCacheDialog.value = false
+  window.clearTimeout(cachePollTimer)
+}
+
+async function startCache() {
+  if (cacheStarting.value || !chapters.value.length) return
+  const start = Math.min(
+    Math.max(1, Math.round(Number(cacheStart.value) || 1)),
+    chapters.value.length,
+  )
+  const end = Math.min(
+    Math.max(1, Math.round(Number(cacheEnd.value) || chapters.value.length)),
+    chapters.value.length,
+  )
+  if (start > end) {
+    showToast('缓存范围无效')
+    return
+  }
+  cacheStart.value = start
+  cacheEnd.value = end
+  cacheStarting.value = true
+  try {
+    cacheJob.value = await api.startChapterCache(bookUrl.value, start - 1, end - 1)
+    void pollCache()
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : String(e))
+  } finally {
+    cacheStarting.value = false
+  }
+}
+
+async function pollCache() {
+  window.clearTimeout(cachePollTimer)
+  const job = cacheJob.value
+  if (!job) return
+  try {
+    const status = await api.chapterCacheStatus(job.id)
+    cacheJob.value = status
+    void loadCachedFlags()
+    if (status.state === 'running' || status.state === 'cancelling') {
+      cachePollTimer = window.setTimeout(() => void pollCache(), 1000)
+    } else if (status.state === 'done') {
+      showToast('章节缓存完成')
+    } else if (status.state === 'cancelled') {
+      showToast('章节缓存已停止')
+    } else if (status.state === 'error') {
+      showToast(status.error || '章节缓存失败')
+    }
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : String(e))
+  }
+}
+
+async function stopCache() {
+  const job = cacheJob.value
+  if (!job) return
+  try {
+    cacheJob.value = await api.stopChapterCache(job.id)
+    void pollCache()
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : String(e))
+  }
+}
+
+const cacheProgress = computed(() => {
+  const job = cacheJob.value
+  if (!job || !job.total) return 0
+  return Math.min(100, Math.round(((job.done + job.failed) / job.total) * 100))
+})
+
+const cacheStateLabel = computed(() => {
+  const job = cacheJob.value
+  if (!job) return ''
+  if (job.state === 'running') return '缓存中'
+  if (job.state === 'cancelling') return '正在停止'
+  if (job.state === 'done') return '缓存完成'
+  if (job.state === 'cancelled') return '已停止'
+  return '缓存失败'
+})
 
 function toggleSettings() {
   showSettings.value = !showSettings.value
@@ -725,6 +850,9 @@ async function selectChapter(
       scrollRef.value?.scrollTo({ top })
     }
     if (save) saveReadingPosition()
+    if (!isPreview.value) {
+      void api.prefetchChapters(bookUrl.value, index).catch(() => undefined)
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -772,6 +900,11 @@ function onKeydown(event: KeyboardEvent) {
   const target = document.activeElement as HTMLElement | null
   if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
   if (event.key === 'Escape') {
+    if (showCacheDialog.value) {
+      closeCacheDialog()
+      event.preventDefault()
+      return
+    }
     if (showToc.value || showSettings.value) {
       showToc.value = false
       showSettings.value = false
@@ -925,6 +1058,7 @@ onBeforeUnmount(() => {
   window.clearTimeout(resizeTimer)
   window.clearTimeout(toastTimer)
   window.clearTimeout(scrollSaveTimer)
+  window.clearTimeout(cachePollTimer)
   syncChannel?.close()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', onResize)
@@ -1125,6 +1259,14 @@ onBeforeUnmount(() => {
           <button
             v-if="drawerTab === 'toc'"
             class="reader-icon"
+            title="缓存章节"
+            @click="openCacheDialog"
+          >
+            <AppIcon name="cloud-download" :size="16" />
+          </button>
+          <button
+            v-if="drawerTab === 'toc'"
+            class="reader-icon"
             :class="{ spinning: refreshingToc }"
             :disabled="refreshingToc"
             title="刷新目录"
@@ -1153,7 +1295,15 @@ onBeforeUnmount(() => {
           :class="{ active: chapter.index === currentIndex }"
           @click="selectChapter(chapter.index); showToc = false"
         >
-          {{ chapter.title }}
+          <span class="reader-toc-title">{{ chapter.title }}</span>
+          <span
+            v-if="!isPreview"
+            class="reader-toc-cache"
+            :class="{ cached: chapter.cached }"
+            :title="chapter.cached ? '已缓存' : '未缓存'"
+          >
+            <AppIcon :name="chapter.cached ? 'check' : 'cloud'" :size="12" />
+          </span>
         </button>
       </div>
 
@@ -1214,6 +1364,58 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </aside>
+
+    <div v-if="showCacheDialog" class="reader-cache-mask" @click.self="closeCacheDialog">
+      <section class="reader-cache-dialog">
+        <header class="reader-cache-head">
+          <strong>离线缓存</strong>
+          <button class="reader-icon" title="关闭" @click="closeCacheDialog">
+            <AppIcon name="x" :size="16" />
+          </button>
+        </header>
+        <p class="reader-cache-label">缓存范围（章号）</p>
+        <div class="reader-cache-range">
+          <input v-model.number="cacheStart" type="number" min="1" :max="chapters.length" />
+          <span>至</span>
+          <input v-model.number="cacheEnd" type="number" min="1" :max="chapters.length" />
+        </div>
+        <p class="reader-cache-hint">
+          默认从当前章缓存到最后一章；已缓存章节会自动跳过。
+          如书源需要人机验证，缓存过程中可能弹出验证窗口。
+        </p>
+        <div v-if="cacheJob" class="reader-cache-progress">
+          <div class="reader-cache-progress-head">
+            <span>{{ cacheStateLabel }}</span>
+            <b>{{ cacheJob.done + cacheJob.failed }} / {{ cacheJob.total }}</b>
+          </div>
+          <div class="reader-cache-bar">
+            <i :style="{ width: `${cacheProgress}%` }" />
+          </div>
+          <p v-if="cacheJob.currentTitle">正在缓存：{{ cacheJob.currentTitle }}</p>
+          <p v-if="cacheJob.failed" class="reader-cache-error">失败 {{ cacheJob.failed }} 章</p>
+          <p v-if="cacheJob.error" class="reader-cache-error">{{ cacheJob.error }}</p>
+        </div>
+        <footer class="reader-cache-actions">
+          <button
+            v-if="cacheJob && (cacheJob.state === 'running' || cacheJob.state === 'cancelling')"
+            class="btn ghost"
+            :disabled="cacheJob.state === 'cancelling'"
+            @click="stopCache"
+          >
+            停止
+          </button>
+          <button
+            v-else
+            class="btn primary"
+            :disabled="cacheStarting"
+            @click="startCache"
+          >
+            {{ cacheStarting ? '开始中…' : '开始缓存' }}
+          </button>
+          <button class="btn ghost" @click="closeCacheDialog">关闭</button>
+        </footer>
+      </section>
+    </div>
 
     <div ref="measureRef" class="measure-page" aria-hidden="true" />
   </div>

@@ -21,6 +21,7 @@ import io.legado.desktop.core.spi.CookieBridgeHolder
 import io.legado.desktop.core.spi.WebviewHosts
 import io.legado.desktop.core.text.ChineseConverter
 import io.legado.desktop.server.ServerContext
+import io.legado.desktop.server.cache.ChapterCacheService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -44,6 +45,7 @@ class ApiRouter(private val context: ServerContext) {
 
     private val contentCache = ConcurrentHashMap<String, ContentDocument>()
     private val sourceMatcher = SourceMatcher(context)
+    private val chapterCacheService = ChapterCacheService(context)
 
     fun handle(
         method: String,
@@ -97,11 +99,17 @@ class ApiRouter(private val context: ServerContext) {
                 uri == "/api/books/by-url" && method == "POST" -> addBooksByUrl(body)
                 uri == "/api/books" && method == "DELETE" -> {
                     val url = params["url"]?.firstOrNull() ?: error("缺少 url")
+                    chapterCacheService.cancelBook(url)
                     context.bookRepo.delete(url)
                     ok(mapOf("deleted" to url))
                 }
                 uri == "/api/books/chapters" && method == "GET" -> chapters(params)
                 uri == "/api/books/chapters/refresh" && method == "POST" -> refreshChapters(body)
+                uri == "/api/books/chapters/cached" && method == "GET" -> cachedChapters(params)
+                uri == "/api/books/cache" && method == "POST" -> startChapterCache(body)
+                uri == "/api/books/cache/stop" && method == "POST" -> stopChapterCache(body)
+                uri == "/api/books/cache/status" && method == "GET" -> chapterCacheStatus(params)
+                uri == "/api/books/prefetch" && method == "POST" -> prefetchChapters(body)
                 uri == "/api/books/content" && method == "GET" -> content(params)
                 uri == "/api/books/video" && method == "GET" -> video(params)
                 uri == "/api/preview/open" && method == "POST" -> openPreview(body)
@@ -156,6 +164,7 @@ class ApiRouter(private val context: ServerContext) {
                 uri == "/api/cache" && method == "GET" -> ok(context.cacheStats())
                 uri == "/api/cache" && method == "DELETE" -> {
                     val type = params["type"]?.firstOrNull() ?: "all"
+                    if (type == "chapter" || type == "all") chapterCacheService.cancelAll()
                     context.clearCache(type)
                     if (type == "chapter" || type == "all") contentCache.clear()
                     ok(context.cacheStats())
@@ -688,14 +697,55 @@ class ApiRouter(private val context: ServerContext) {
         val bookUrl = params["url"]?.firstOrNull() ?: error("缺少 url")
         val book = context.bookRepo.get(bookUrl) ?: error("书籍不在书架")
         val cached = context.bookRepo.chapters(bookUrl)
-        if (cached.isNotEmpty()) return ok(displayChapters(cached, book))
+        if (cached.isNotEmpty()) return ok(markCached(displayChapters(cached, book), bookUrl))
         val source = context.findSource(bookUrl) ?: error("找不到对应书源")
         val chapters = runBlocking { SourceEngine(source).chapters(book) }
         book.totalChapterNum = chapters.size
         book.latestChapterTitle = chapters.lastOrNull()?.title
         context.bookRepo.upsert(book)
         context.bookRepo.saveChapters(bookUrl, chapters)
-        return ok(displayChapters(chapters, book))
+        return ok(markCached(displayChapters(chapters, book), bookUrl))
+    }
+
+    private fun markCached(chapters: List<BookChapter>, bookUrl: String): List<BookChapter> {
+        val cached = context.chapterCacheRepo.indices(bookUrl)
+        if (cached.isEmpty()) return chapters
+        return chapters.map { chapter ->
+            val isCached = chapter.index in cached
+            if (chapter.cached == isCached) chapter else chapter.copy(cached = isCached)
+        }
+    }
+
+    private fun cachedChapters(params: Map<String, List<String>>): ApiPayload {
+        val bookUrl = params["url"]?.firstOrNull() ?: error("缺少 url")
+        return ok(mapOf("cached" to context.chapterCacheRepo.indices(bookUrl).sorted()))
+    }
+
+    private fun startChapterCache(body: String): ApiPayload {
+        val obj = JsonParser.parseString(body).asJsonObject
+        val url = obj.get("url")?.asString ?: error("缺少 url")
+        val start = obj.get("start")?.asInt ?: error("缺少 start")
+        val end = obj.get("end")?.asInt ?: error("缺少 end")
+        return ok(chapterCacheService.startManual(url, start, end).toJson())
+    }
+
+    private fun stopChapterCache(body: String): ApiPayload {
+        val obj = JsonParser.parseString(body).asJsonObject
+        val id = obj.get("id")?.asString ?: error("缺少 id")
+        return ok(chapterCacheService.stop(id))
+    }
+
+    private fun chapterCacheStatus(params: Map<String, List<String>>): ApiPayload {
+        val id = params["id"]?.firstOrNull() ?: error("缺少 id")
+        return ok(chapterCacheService.status(id))
+    }
+
+    private fun prefetchChapters(body: String): ApiPayload {
+        val obj = JsonParser.parseString(body).asJsonObject
+        val url = obj.get("url")?.asString ?: error("缺少 url")
+        val index = obj.get("index")?.asInt ?: 0
+        val job = chapterCacheService.startPrefetch(url, index)
+        return ok(mapOf("started" to (job != null), "job" to job?.toJson()))
     }
 
     private fun refreshChapters(body: String): ApiPayload {
@@ -706,6 +756,7 @@ class ApiRouter(private val context: ServerContext) {
         val oldChapterUrl = runCatching {
             context.bookRepo.getChapter(bookUrl, book.durChapterIndex)?.url
         }.getOrNull()
+        chapterCacheService.cancelBook(bookUrl)
         val chapters = runBlocking { SourceEngine(source).chapters(book) }
         if (chapters.isEmpty()) error("目录为空")
         book.totalChapterNum = chapters.size
@@ -717,7 +768,7 @@ class ApiRouter(private val context: ServerContext) {
         context.bookRepo.upsert(book)
         context.bookRepo.saveChapters(bookUrl, chapters)
         contentCache.keys.removeIf { it.startsWith("$bookUrl#") }
-        return ok(displayChapters(chapters, book))
+        return ok(markCached(displayChapters(chapters, book), bookUrl))
     }
 
     private fun content(params: Map<String, List<String>>): ApiPayload {
@@ -1106,6 +1157,7 @@ class ApiRouter(private val context: ServerContext) {
         val result = JsonObject()
         result.addProperty("replaceEnabled", true)
         result.addProperty("chineseScript", ChineseConverter.OFF)
+        result.addProperty("preloadChapterCount", 7)
         context.settingsRepo.all().forEach { (key, raw) ->
             val parsed = runCatching { JsonParser.parseString(raw) }.getOrNull()
             if (parsed != null) result.add(key, parsed) else result.addProperty(key, raw)

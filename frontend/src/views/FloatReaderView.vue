@@ -288,6 +288,9 @@ async function loadChapter(
       pageIndex.value = clamp(Math.round(options.page), 0, pages.value.length - 1)
     }
     if (options.notify !== false) afterChange()
+    if (book.value) {
+      void api.prefetchChapters(book.value.bookUrl, index).catch(() => undefined)
+    }
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   } finally {

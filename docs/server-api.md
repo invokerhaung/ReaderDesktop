@@ -49,6 +49,11 @@ SQLite（`data/legado.db`，sqlite-jdbc）：
 | DELETE | `/api/books?url=` | 删除书籍与章节 |
 | GET | `/api/books/chapters?url=` | 目录；优先读库，缺失时抓取并写入 |
 | POST | `/api/books/chapters/refresh` | body `{"url":"..."}`；重新抓取全部分页目录并替换缓存，保留当前阅读章节 |
+| GET | `/api/books/chapters/cached?url=` | 返回 `{"cached":[章节idx...]}`，用于目录缓存状态刷新 |
+| POST | `/api/books/cache` | body `{"url":"...","start":N,"end":M}`（0-based，含端点）；手动范围缓存，返回任务 `{id,total,done,failed,state,...}` |
+| GET | `/api/books/cache/status?id=` | 查询缓存任务进度与当前章节 |
+| POST | `/api/books/cache/stop` | body `{"id":"..."}`；停止手动缓存任务（当前请求完成后停止） |
+| POST | `/api/books/prefetch` | body `{"url":"...","index":N}`；按设置 `preloadChapterCount` 静默预取后续/前序章节 |
 | GET | `/api/books/content?url=&index=&refresh=1` | 正文；内存缓存，返回 `content` 文本与 `blocks` 结构（文本/图片），并应用替换规则。`refresh=1` 跳过内存/磁盘缓存强制重新抓取，成功后更新缓存，失败时保留旧正文。漫画书源的 `blocks` 即章节图片列表 |
 | GET | `/api/books/video?url=&index=&resolution=&refresh=1` | 视频取流：解析 `contentRule`（单 URL / `名称::URL` / JSON resolutions），返回 `kind`（`hls`/`file`/`drm`）、`url`、`resolutions`、`defaultIndex`、`drm` |
 | POST | `/api/preview/open` | 临时试看（不写书架）：body 为搜索结果元数据（`bookUrl/sourceKey/name/...`），返回 `{id, book, chapters}`；会话仅驻内存，TTL 30 分钟 |
@@ -147,6 +152,7 @@ SQLite（`data/legado.db`，sqlite-jdbc）：
 | `cacheChapterDays` | number | 正文缓存保留天数，默认 30，范围 1–3650 |
 | `appTheme` | string | 应用整体主题 `ink/slate/black/paper/eye` |
 | `chineseScript` | string | 正文/章节标题简繁转换：`off`（默认）/`simplified`/`traditional`；只影响显示，不修改正文缓存 |
+| `preloadChapterCount` | number | 自动预载章节数，默认 7，范围 0–50；0 关闭。向前预载 N 章，向后最多 5 章 |
 | `float` | object | 浮窗阅读配置，见下表 |
 
 浮窗配置 `float`：
@@ -167,6 +173,14 @@ SQLite（`data/legado.db`，sqlite-jdbc）：
 | `width` / `height` | number | 浮窗默认尺寸，最小 300×200 |
 
 `PUT /api/settings` 只合并传入的键，不会清空其他设置。
+
+## 章节预取与缓存
+
+- `GET /api/books/chapters` 的每章带 `cached` 字段；目录打开时还可调用 `chapters/cached` 轻量刷新。
+- 打开/切换章节后，前端调用 `/api/books/prefetch`；服务端按 `preloadChapterCount`（默认 7）预取后续章节，并向前最多 5 章。自动预取仅允许隐藏 WebView，失败静默跳过，不弹出 CF 验证窗口。
+- 手动缓存由目录里的「缓存章节」对话框发起，默认范围是当前章到末章（1-based 显示，0-based 提交）；服务端并发 1、允许可见 CF 验证、支持进度轮询与停止，已缓存章节自动跳过。
+- 章节缓存写入 `chapter_cache`，手动/预取都走同一张表；清理缓存会取消进行中的任务。
+- `refreshChapters` / 删除书籍会取消该书的缓存任务；TOC 刷新后索引可能变化，不会继续缓存旧范围。
 
 ## CF 网页验证
 

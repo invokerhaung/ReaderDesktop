@@ -56,6 +56,22 @@ export interface Chapter {
   url: string
   isVip?: boolean
   resourceUrl?: string | null
+  cached?: boolean
+}
+
+export interface ChapterCacheJob {
+  id: string
+  bookUrl: string
+  kind: 'manual' | 'prefetch'
+  state: 'running' | 'cancelling' | 'done' | 'cancelled' | 'error'
+  total: number
+  done: number
+  failed: number
+  currentIndex?: number | null
+  currentTitle?: string | null
+  error?: string | null
+  cancelled: boolean
+  allowVisible: boolean
 }
 
 export interface VideoResolutionItem {
@@ -131,6 +147,7 @@ export interface AppSettings {
   mode?: string
   replaceEnabled?: boolean
   chineseScript?: string
+  preloadChapterCount?: number
   float?: unknown
   [key: string]: unknown
 }
@@ -360,6 +377,32 @@ export const api = {
     request<Chapter[]>('/api/books/chapters/refresh', {
       method: 'POST',
       body: JSON.stringify({ url }),
+    }),
+
+  cachedChapters: (url: string) =>
+    request<{ cached: number[] }>(
+      `/api/books/chapters/cached?url=${encodeURIComponent(url)}`,
+    ),
+
+  startChapterCache: (url: string, start: number, end: number) =>
+    request<ChapterCacheJob>('/api/books/cache', {
+      method: 'POST',
+      body: JSON.stringify({ url, start, end }),
+    }),
+
+  stopChapterCache: (id: string) =>
+    request<ChapterCacheJob>('/api/books/cache/stop', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    }),
+
+  chapterCacheStatus: (id: string) =>
+    request<ChapterCacheJob>(`/api/books/cache/status?id=${encodeURIComponent(id)}`),
+
+  prefetchChapters: (url: string, index: number) =>
+    request<{ started: boolean; job?: ChapterCacheJob }>('/api/books/prefetch', {
+      method: 'POST',
+      body: JSON.stringify({ url, index }),
     }),
 
   content: (url: string, index: number, options: { refresh?: boolean } = {}) => {

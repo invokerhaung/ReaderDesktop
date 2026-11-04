@@ -266,8 +266,8 @@ class SourceEngine(private val source: BookSource) {
         return chapters
     }
 
-    suspend fun content(book: Book, chapter: BookChapter): String =
-        contentDocument(book, chapter).text
+    suspend fun content(book: Book, chapter: BookChapter, allowVisibleChallenge: Boolean = true): String =
+        contentDocument(book, chapter, allowVisibleChallenge).text
 
     /**
      * 视频源取流：contentRule 可能返回单个 URL、`名称::URL` 多行、或 JSON（resolutions/headers）。
@@ -337,7 +337,11 @@ class SourceEngine(private val source: BookSource) {
         )
     }
 
-    suspend fun contentDocument(book: Book, chapter: BookChapter): ContentDocument {
+    suspend fun contentDocument(
+        book: Book,
+        chapter: BookChapter,
+        allowVisibleChallenge: Boolean = true,
+    ): ContentDocument {
         val analyzeUrl = AnalyzeUrl(
             mUrl = chapter.url,
             source = source,
@@ -345,7 +349,7 @@ class SourceEngine(private val source: BookSource) {
             chapter = chapter,
             coroutineContext = currentCoroutineContext(),
         )
-        val response = analyzeUrl.getStrResponseAwait()
+        val response = analyzeUrl.getStrResponseAwait(allowVisibleChallenge = allowVisibleChallenge)
         val body = response.body ?: throw NoStackTraceException("正文页内容为空")
         val baseUrl = response.url
         val rule = source.getContentRule()
@@ -376,7 +380,7 @@ class SourceEngine(private val source: BookSource) {
                 ruleData = book,
                 chapter = chapter,
                 coroutineContext = currentCoroutineContext(),
-            ).getStrResponseAwait()
+            ).getStrResponseAwait(allowVisibleChallenge = allowVisibleChallenge)
             val nextBody = nextResponse.body ?: break
             val nextRule = AnalyzeRule(book, source)
             nextRule.setContent(nextBody)

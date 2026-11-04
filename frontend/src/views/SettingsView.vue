@@ -45,6 +45,7 @@ interface Prefs {
   replaceEnabled: boolean
   cacheEnabled: boolean
   cacheChapterDays: number
+  preloadChapterCount: number
   float: FloatPrefs
 }
 
@@ -69,6 +70,7 @@ const DEFAULTS: Prefs = {
   replaceEnabled: true,
   cacheEnabled: true,
   cacheChapterDays: 30,
+  preloadChapterCount: 7,
   float: { ...FLOAT_DEFAULTS },
 }
 
@@ -311,6 +313,9 @@ async function load() {
     if (typeof settings.cacheEnabled === 'boolean') prefs.cacheEnabled = settings.cacheEnabled
     if (isNumber(settings.cacheChapterDays, 1, 3650)) {
       prefs.cacheChapterDays = settings.cacheChapterDays
+    }
+    if (isNumber(settings.preloadChapterCount, 0, 50)) {
+      prefs.preloadChapterCount = settings.preloadChapterCount
     }
     prefs.float = normalizeFloatPrefs(settings.float)
   } catch (e) {
@@ -858,6 +863,18 @@ onBeforeUnmount(() => {
                 <option :value="365">1 年</option>
               </select>
             </label>
+            <label class="pref-field">
+              <span>自动预载后续章节</span>
+              <input
+                v-model.number="prefs.preloadChapterCount"
+                type="number"
+                min="0"
+                max="50"
+              />
+            </label>
+            <p class="pref-note">
+              默认 7 章；会同时向前预载最多 5 章，0 表示关闭。预载在后台静默进行，优先隐藏 WebView，失败不会弹出验证窗口。
+            </p>
             <div class="pref-stat-inline">
               <span>封面 / 插图缓存</span>
               <b>{{ cacheStats?.coverFiles ?? 0 }} 张 · {{ formatBytes(cacheStats?.coverBytes) }}</b>

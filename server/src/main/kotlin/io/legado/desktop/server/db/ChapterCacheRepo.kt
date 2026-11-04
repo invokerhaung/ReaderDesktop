@@ -59,6 +59,20 @@ class ChapterCacheRepo(private val database: Database) {
         }
     }
 
+    fun indices(bookUrl: String): Set<Int> = database.use { connection ->
+        connection.prepareStatement(
+            "SELECT idx FROM chapter_cache WHERE book_url = ? AND version = ?"
+        ).use { statement ->
+            statement.setString(1, bookUrl)
+            statement.setInt(2, VERSION)
+            statement.executeQuery().use { rs ->
+                buildSet {
+                    while (rs.next()) add(rs.getInt("idx"))
+                }
+            }
+        }
+    }
+
     fun clear() {
         database.use { connection ->
             connection.prepareStatement("DELETE FROM chapter_cache").use { it.executeUpdate() }

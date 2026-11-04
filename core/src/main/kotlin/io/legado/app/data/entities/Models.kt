@@ -188,6 +188,8 @@ data class BookChapter(
     var isVip: Boolean = false,
     var isPay: Boolean = false,
     var resourceUrl: String? = null,
+    /** 桌面端扩展：该章是否已有本地正文缓存，不写入 chapters 表。 */
+    var cached: Boolean = false,
     var tag: String? = null,
     var variable: String? = null,
 ) : RuleDataInterface {
