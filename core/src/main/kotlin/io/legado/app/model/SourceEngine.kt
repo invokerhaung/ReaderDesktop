@@ -10,6 +10,7 @@ import io.legado.app.help.source.getBookType
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setNextChapterUrl
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.utils.GSON
@@ -266,8 +267,13 @@ class SourceEngine(private val source: BookSource) {
         return chapters
     }
 
-    suspend fun content(book: Book, chapter: BookChapter, allowVisibleChallenge: Boolean = true): String =
-        contentDocument(book, chapter, allowVisibleChallenge).text
+    suspend fun content(
+        book: Book,
+        chapter: BookChapter,
+        allowVisibleChallenge: Boolean = true,
+        nextChapterUrl: String? = null,
+    ): String =
+        contentDocument(book, chapter, allowVisibleChallenge, nextChapterUrl).text
 
     /**
      * 视频源取流：contentRule 可能返回单个 URL、`名称::URL` 多行、或 JSON（resolutions/headers）。
@@ -341,6 +347,7 @@ class SourceEngine(private val source: BookSource) {
         book: Book,
         chapter: BookChapter,
         allowVisibleChallenge: Boolean = true,
+        nextChapterUrl: String? = null,
     ): ContentDocument {
         val analyzeUrl = AnalyzeUrl(
             mUrl = chapter.url,
@@ -359,6 +366,7 @@ class SourceEngine(private val source: BookSource) {
         analyzeRule.setRedirectUrl(baseUrl)
         analyzeRule.setCoroutineContext(currentCoroutineContext())
         analyzeRule.setChapter(chapter)
+        analyzeRule.setNextChapterUrl(nextChapterUrl)
 
         val documents = ArrayList<ContentDocument>()
 
@@ -370,10 +378,24 @@ class SourceEngine(private val source: BookSource) {
             documents.add(htmlToDocument(pageContent, pageBaseUrl, rule.imageStyle))
         }
 
+        fun pageKey(url: String, base: String): String {
+            val raw = url.trim()
+            if (raw.isEmpty()) return ""
+            val resolved = runCatching {
+                java.net.URI(base).resolve(raw).toString()
+            }.getOrDefault(raw)
+            return resolved.substringBefore('#')
+        }
+
         appendPage(analyzeRule.getString(rule.content), baseUrl, analyzeRule)
-        var nextUrl = analyzeRule.getString(rule.nextContentUrl, isUrl = true)
+        val stopAt = nextChapterUrl?.let { pageKey(it, baseUrl) }.orEmpty()
+        val visited = mutableSetOf(pageKey(chapter.url, baseUrl))
+        var nextUrl = pageKey(analyzeRule.getString(rule.nextContentUrl, isUrl = true), baseUrl)
         var page = 0
-        while (nextUrl.isNotBlank() && nextUrl != chapter.url && page++ < 10) {
+        while (nextUrl.isNotBlank() && page++ < 10) {
+            // 最后一页的“下一页”通常指向下一章；碰到目录里的下一章或已抓过的页就停
+            if (nextUrl == stopAt) break
+            if (!visited.add(nextUrl)) break
             val nextResponse = AnalyzeUrl(
                 mUrl = nextUrl,
                 source = source,
@@ -388,8 +410,9 @@ class SourceEngine(private val source: BookSource) {
             nextRule.setRedirectUrl(nextResponse.url)
             nextRule.setCoroutineContext(currentCoroutineContext())
             nextRule.setChapter(chapter)
+            nextRule.setNextChapterUrl(nextChapterUrl)
             appendPage(nextRule.getString(rule.content), nextResponse.url, nextRule)
-            nextUrl = nextRule.getString(rule.nextContentUrl, isUrl = true)
+            nextUrl = pageKey(nextRule.getString(rule.nextContentUrl, isUrl = true), nextResponse.url)
         }
 
         val blocks = documents.flatMap { it.blocks }

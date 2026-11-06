@@ -9,7 +9,8 @@ import io.legado.app.utils.GSON
 class ChapterCacheRepo(private val database: Database) {
 
     companion object {
-        private const val VERSION = 1
+        // 2: 修复多页章节把后续章节拼进正文的问题，旧版本缓存一律作废
+        private const val VERSION = 2
     }
 
     fun get(bookUrl: String, index: Int, maxAgeDays: Int? = null): ContentDocument? =
@@ -90,11 +91,14 @@ class ChapterCacheRepo(private val database: Database) {
 
     fun prune(maxAgeDays: Int) {
         database.use { connection ->
-            connection.prepareStatement("DELETE FROM chapter_cache WHERE updated_at < ?").use { statement ->
+            connection.prepareStatement(
+                "DELETE FROM chapter_cache WHERE updated_at < ? OR version <> ?"
+            ).use { statement ->
                 statement.setLong(
                     1,
                     System.currentTimeMillis() - maxAgeDays.coerceAtLeast(1) * 24L * 60 * 60 * 1000,
                 )
+                statement.setInt(2, VERSION)
                 statement.executeUpdate()
             }
         }

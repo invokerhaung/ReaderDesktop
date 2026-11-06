@@ -198,7 +198,9 @@ class ChapterCacheService(private val context: ServerContext) {
                             val chapter = chapters[index]
                             job.currentIndex = index
                             job.currentTitle = chapter.title
-                            if (fetchWithRetry(job, book, source, chapter)) {
+                            val nextChapterUrl = chapters.getOrNull(index + 1)?.url
+                                ?: chapters.firstOrNull()?.url
+                            if (fetchWithRetry(job, book, source, chapter, nextChapterUrl)) {
                                 synchronized(cached) { cached.add(index) }
                                 job.done.incrementAndGet()
                             } else {
@@ -232,6 +234,7 @@ class ChapterCacheService(private val context: ServerContext) {
         book: Book,
         source: BookSource,
         chapter: BookChapter,
+        nextChapterUrl: String?,
     ): Boolean {
         val timeoutMs = if (job.allowVisible) 240_000L else 60_000L
         // 自动预取失败就跳过，避免 CF 站点把 7 章预取拖成数分钟；手动缓存保留 3 次重试
@@ -240,7 +243,12 @@ class ChapterCacheService(private val context: ServerContext) {
             if (job.cancelled) return false
             try {
                 val document = withTimeout(timeoutMs) {
-                    SourceEngine(source).contentDocument(book, chapter, job.allowVisible)
+                    SourceEngine(source).contentDocument(
+                        book,
+                        chapter,
+                        job.allowVisible,
+                        nextChapterUrl,
+                    )
                 }
                 if (!job.cancelled) {
                     context.chapterCacheRepo.save(job.bookUrl, chapter.index, document)

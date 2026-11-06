@@ -559,7 +559,7 @@ onBeforeUnmount(() => {
                 </select>
               </label>
               <div class="pref-field">
-                <span>进度显示</span>
+                <span>章节名显示</span>
                 <div class="pref-segmented">
                   <button
                     :class="{ active: prefs.float.progress === 'bottom' }"

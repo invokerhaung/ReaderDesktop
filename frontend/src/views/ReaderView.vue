@@ -10,7 +10,12 @@ import {
   type Content,
 } from '../api/client'
 import { imageSrc } from '../api/cover'
-import { FLOAT_SYNC_CHANNEL, type FloatProgressMessage } from '../api/floatReader'
+import {
+  chapterListKey,
+  FLOAT_SYNC_CHANNEL,
+  type FloatProgressMessage,
+  type FloatSyncMessage,
+} from '../api/floatReader'
 import AppIcon from '../components/AppIcon.vue'
 
 interface Block {
@@ -74,10 +79,19 @@ let applyingRemote = false
 let lastLocalProgressAt = 0
 let lastRemoteApplyAt = 0
 let scrollSaveTimer: number | undefined
+let loadSeq = 0
+let pendingRemote: FloatProgressMessage | null = null
+let suppressRemoteUntil = 0
+/** 主窗口最近一次本地切章时刻；浮窗发出的进度若早于它，说明浮窗还没看到新章节。 */
+let lastLocalChapterChangeAt = 0
+/** 当前正文实际对应的章节，加载失败时用它回退目录高亮。 */
+const displayedIndex = ref(0)
+const tocListRef = ref<HTMLElement | null>(null)
 
 function saveProgress(index: number, position?: number) {
   if (isPreview.value) return
-  void api.saveProgress(bookUrl.value, index, position).catch(() => undefined)
+  const chapterUrl = chapters.value[index]?.url
+  void api.saveProgress(bookUrl.value, index, position, chapterUrl).catch(() => undefined)
 }
 
 function scrollPercent(): number {
@@ -91,7 +105,7 @@ function pagePercent(): number {
   return Math.max(0, Math.min(1, pageIndex.value / (pages.value.length - 1)))
 }
 
-function notifyProgress() {
+function notifyProgress(chapterStart = false) {
   if (isPreview.value || !book.value) return
   const at = Date.now()
   lastLocalProgressAt = at
@@ -104,8 +118,30 @@ function notifyProgress() {
     percent: settings.mode === 'paged' ? pagePercent() : scrollPercent(),
     chapterTitle: chapterTitle.value,
     at,
+    chapterStart: chapterStart || undefined,
+    chapterUrl: chapters.value[currentIndex.value]?.url,
+    tocKey: tocKey.value,
   }
   syncChannel?.postMessage(message)
+}
+
+/** 本地切章一开始就通知浮窗，避免它继续停留在旧章节并回写旧进度。 */
+function broadcastChapterStart(index: number, at: number) {
+  if (isPreview.value || !book.value) return
+  lastLocalProgressAt = at
+  syncChannel?.postMessage({
+    type: 'progress',
+    source: 'reader',
+    bookUrl: bookUrl.value,
+    index,
+    page: 0,
+    percent: 0,
+    chapterTitle: chapters.value[index]?.title ?? book.value.name,
+    at,
+    chapterStart: true,
+    chapterUrl: chapters.value[index]?.url,
+    tocKey: tocKey.value,
+  } satisfies FloatProgressMessage)
 }
 
 function saveReadingPosition() {
@@ -117,16 +153,78 @@ function saveReadingPosition() {
   notifyProgress()
 }
 
+/** 另一端目录版本不同：重新拉取目录，并按 URL 重新映射当前章节。 */
+async function reloadTocForSync(): Promise<boolean> {
+  if (tocReloading) return false
+  tocReloading = true
+  try {
+    const displayedUrl = chapters.value[displayedIndex.value]?.url
+    const currentUrl = chapters.value[currentIndex.value]?.url
+    const list = await api.chapters(bookUrl.value)
+    if (!list.length) return false
+    chapters.value = list
+    if (book.value) book.value.totalChapterNum = list.length
+    const remap = (url?: string) => (url ? list.findIndex((chapter) => chapter.url === url) : -1)
+    const displayed = remap(displayedUrl)
+    const current = remap(currentUrl)
+    if (displayed >= 0) displayedIndex.value = displayed
+    if (current >= 0) currentIndex.value = current
+    return true
+  } catch {
+    return false
+  } finally {
+    tocReloading = false
+  }
+}
+
 async function applyRemoteProgress(message: FloatProgressMessage) {
-  if (isPreview.value || message.bookUrl !== bookUrl.value || applyingRemote) return
-  // 本地正在切章/排版时，不接收另一端的进度
-  if (loadingContent.value) return
+  if (isPreview.value || message.bookUrl !== bookUrl.value) return
+  // 浮窗还没收到主窗口最近的切章通知，它发来的章节已过时，忽略（即使加载很慢也不会被拉回）
+  if (
+    typeof message.mainChangeAt === 'number' &&
+    message.mainChangeAt < lastLocalChapterChangeAt
+  ) {
+    // 浮窗还在旧章节，回播一次主窗口状态，让它刷新目录并按 URL 追上
+    notifyProgress(true)
+    return
+  }
+  // 正在处理上一条远端进度时，后来的消息也要排队（很可能才是最新位置），不能丢
+  if (applyingRemote) {
+    if (!pendingRemote || (message.at ?? 0) >= (pendingRemote.at ?? 0)) pendingRemote = message
+    return
+  }
+  // 本地刚切完章，浮窗可能还在回写旧章节进度；直接丢弃，避免目录高亮被拉回
+  if (Date.now() < suppressRemoteUntil) {
+    pendingRemote = null
+    return
+  }
+  // 本地正在切章/排版时不能直接应用，先记下来，等加载完再处理
+  if (loadingContent.value) {
+    if (!pendingRemote || (message.at ?? 0) >= (pendingRemote.at ?? 0)) pendingRemote = message
+    return
+  }
+  // 目录版本不同（新增/插入了章节）时，先按 URL 刷新目录再同步，避免用旧下标切到错误章节
+  if (message.tocKey && message.tocKey !== tocKey.value) {
+    const reloaded = await reloadTocForSync()
+    if (!reloaded || (message.tocKey && message.tocKey !== tocKey.value)) {
+      // 对方目录是旧版本，把主窗口的新目录状态发过去让它重载
+      notifyProgress(true)
+      return
+    }
+  }
+  const targetIndex =
+    message.chapterUrl && chapters.value.length
+      ? chapters.value.findIndex((chapter) => chapter.url === message.chapterUrl)
+      : message.index
+  if (targetIndex < 0 || targetIndex >= chapters.value.length) return
   // 迟到的旧进度不覆盖本地刚翻到的位置
   if (message.at && message.at < lastLocalProgressAt) return
   applyingRemote = true
   try {
-    if (message.index !== currentIndex.value) {
-      await selectChapter(message.index, false)
+    if (targetIndex !== currentIndex.value) {
+      await selectChapter(targetIndex, false)
+      // 切章失败会回退到当前正文所在章节，此时不能再用远端百分比定位旧正文
+      if (currentIndex.value !== targetIndex) return
     }
     if (settings.mode === 'paged' && typeof message.percent === 'number') {
       pageIndex.value = Math.min(
@@ -153,7 +251,21 @@ async function applyRemoteProgress(message: FloatProgressMessage) {
   } finally {
     lastRemoteApplyAt = Date.now()
     applyingRemote = false
+    flushPendingRemote()
   }
+}
+
+function flushPendingRemote() {
+  const next = pendingRemote
+  if (!next) return
+  if (Date.now() < suppressRemoteUntil) {
+    pendingRemote = null
+    return
+  }
+  if (applyingRemote || loadingContent.value) return
+  pendingRemote = null
+  if (next.at && next.at < lastLocalProgressAt) return
+  void applyRemoteProgress(next)
 }
 
 async function manualVerify() {
@@ -203,6 +315,8 @@ async function openFloatWindow() {
 
 const book = ref<Book | null>(null)
 const chapters = ref<Chapter[]>([])
+const tocKey = computed(() => chapterListKey(chapters.value))
+let tocReloading = false
 const currentIndex = ref(0)
 const content = ref('')
 const contentBlocks = ref<ReaderBlock[]>([])
@@ -264,8 +378,6 @@ const progressPercent = computed(() => {
   }
   return pages.value.length ? ((pageIndex.value + 1) / pages.value.length) * 100 : 0
 })
-
-const modeLabel = computed(() => (settings.mode === 'paged' ? '横向' : '滚动'))
 
 interface SearchHit {
   blockIndex: number
@@ -335,6 +447,10 @@ watch(
 
 watch([showToc, showSettings], () => showChrome())
 
+watch(drawerTab, (tab) => {
+  if (tab === 'toc' && showToc.value) scrollTocToCurrent()
+})
+
 let chromeTimer: number | undefined
 function showChrome() {
   chromeVisible.value = true
@@ -356,9 +472,25 @@ function openDrawer(tab: 'toc' | 'bookmarks' | 'search') {
   drawerTab.value = tab
   showToc.value = true
   showSettings.value = false
-  if (tab === 'toc') void loadCachedFlags()
+  if (tab === 'toc') {
+    scrollTocToCurrent()
+    void loadCachedFlags().then(() => scrollTocToCurrent())
+  }
   if (tab === 'bookmarks') void loadBookmarks()
   if (tab === 'search') void nextTick(() => searchInput.value?.focus())
+}
+
+/** 打开目录时直接把当前章滚到可视区中间（不用 scrollIntoView，避免被其它滚动容器带偏）。 */
+function scrollTocToCurrent() {
+  void nextTick(() => {
+    const list = tocListRef.value
+    const active = list?.querySelector<HTMLElement>('.reader-toc-item.active')
+    if (!list || !active) return
+    const listRect = list.getBoundingClientRect()
+    const activeRect = active.getBoundingClientRect()
+    const top = activeRect.top - listRect.top + list.scrollTop
+    list.scrollTop = Math.max(0, top - (list.clientHeight - activeRect.height) / 2)
+  })
 }
 
 async function loadCachedFlags() {
@@ -498,24 +630,44 @@ async function loadBookmarks() {
   }
 }
 
+function nearestChapterIndex(list: Chapter[], url: string, around: number): number {
+  let best = -1
+  let bestDistance = Number.MAX_SAFE_INTEGER
+  list.forEach((item, index) => {
+    if (item.url !== url) return
+    const distance = Math.abs(index - around)
+    if (distance < bestDistance) {
+      best = index
+      bestDistance = distance
+    }
+  })
+  return best
+}
+
 async function refreshToc() {
   if (refreshingToc.value) return
   if (isPreview.value) {
     showToast('试看模式不支持刷新目录')
     return
   }
-  const oldChapterUrl = chapters.value[currentIndex.value]?.url
+  const oldIndex = displayedIndex.value
+  const oldChapterUrl = chapters.value[oldIndex]?.url
   refreshingToc.value = true
   try {
     const list = await api.refreshChapters(bookUrl.value)
     chapters.value = list
     if (book.value) book.value.totalChapterNum = list.length
-    const matched = oldChapterUrl ? list.findIndex((item) => item.url === oldChapterUrl) : -1
+    const matched = oldChapterUrl ? nearestChapterIndex(list, oldChapterUrl, oldIndex) : -1
     if (matched >= 0) {
+      // 同一个 URL 说明正文仍是这一章，只同步新目录里的位置，不重新抓正文
       currentIndex.value = matched
+      displayedIndex.value = matched
       saveProgress(matched)
+      // 目录版本已变，通知浮窗刷新目录并按 URL 对齐
+      notifyProgress(true)
+      scrollTocToCurrent()
     } else {
-      await selectChapter(Math.min(currentIndex.value, list.length - 1), false)
+      await selectChapter(Math.min(oldIndex, list.length - 1))
     }
     showToast(`目录已更新，共 ${list.length} 章`)
   } catch (e) {
@@ -535,7 +687,10 @@ async function refreshCurrentChapter() {
   try {
     const data = isPreview.value
       ? await api.previewContent(previewId.value, index, { refresh: true })
-      : await api.content(bookUrl.value, index, { refresh: true })
+      : await api.content(bookUrl.value, index, {
+          refresh: true,
+          chapterUrl: chapters.value[index]?.url,
+        })
     content.value = data.content
     contentBlocks.value = toReaderBlocks(data)
     await nextTick()
@@ -827,36 +982,61 @@ async function selectChapter(
   target?: { mode: 'paged' | 'scroll'; position: number },
 ) {
   if (index < 0 || index >= chapters.value.length) return
+  const seq = ++loadSeq
+  const previousIndex = displayedIndex.value
   currentIndex.value = index
   loadingContent.value = true
   error.value = ''
+  // save=true 表示用户主动切章；立即通知浮窗，并在短时间内拒绝它的旧章节进度
+  if (save) {
+    const at = Date.now()
+    lastLocalChapterChangeAt = at
+    suppressRemoteUntil = at + 1200
+    broadcastChapterStart(index, at)
+  }
   try {
     const data = isPreview.value
       ? await api.previewContent(previewId.value, index)
-      : await api.content(bookUrl.value, index)
+      : await api.content(bookUrl.value, index, { chapterUrl: chapters.value[index]?.url })
+    if (seq !== loadSeq) return
     content.value = data.content
     contentBlocks.value = toReaderBlocks(data)
     await nextTick()
+    if (seq !== loadSeq) return
     if (settings.mode === 'paged') {
       pageIndex.value = 0
       await paginate(position === 'last')
+      if (seq !== loadSeq) return
       if (target?.mode === 'paged') {
         pageIndex.value = Math.min(Math.max(target.position, 0), pages.value.length - 1)
       }
     } else {
       pageIndex.value = 0
       await nextTick()
+      if (seq !== loadSeq) return
       const top = target?.mode === 'scroll' ? Math.max(0, target.position) : 0
       scrollRef.value?.scrollTo({ top })
     }
+    displayedIndex.value = index
     if (save) saveReadingPosition()
     if (!isPreview.value) {
-      void api.prefetchChapters(bookUrl.value, index).catch(() => undefined)
+      void api
+        .prefetchChapters(bookUrl.value, index, chapters.value[index]?.url)
+        .catch(() => undefined)
     }
   } catch (e) {
+    if (seq !== loadSeq) return
     error.value = e instanceof Error ? e.message : String(e)
+    // 正文没有换成目标章节时，目录高亮必须跟正文保持一致
+    if (currentIndex.value !== previousIndex && content.value) {
+      currentIndex.value = previousIndex
+      if (save) notifyProgress()
+    }
   } finally {
-    loadingContent.value = false
+    if (seq === loadSeq) {
+      loadingContent.value = false
+      flushPendingRemote()
+    }
   }
 }
 
@@ -1006,10 +1186,17 @@ onMounted(async () => {
   showChrome()
   if (typeof BroadcastChannel !== 'undefined') {
     syncChannel = new BroadcastChannel(FLOAT_SYNC_CHANNEL)
-    syncChannel.onmessage = (event: MessageEvent<FloatProgressMessage>) => {
+    syncChannel.onmessage = (event: MessageEvent<FloatSyncMessage>) => {
       const message = event.data
-      if (!message || message.type !== 'progress' || message.source !== 'float') return
-      void applyRemoteProgress(message)
+      if (!message || message.source !== 'float') return
+      if (message.type === 'sync-request') {
+        if (isPreview.value || !book.value) return
+        if (message.bookUrl && message.bookUrl !== bookUrl.value) return
+        // 浮窗重新获得焦点时回播一次当前进度，修复它隐藏/加载期间漏收的消息
+        notifyProgress(true)
+        return
+      }
+      if (message.type === 'progress') void applyRemoteProgress(message)
     }
   }
   window.addEventListener('keydown', onKeydown)
@@ -1192,7 +1379,7 @@ onBeforeUnmount(() => {
     <p v-if="toast" class="reader-toast">{{ toast }}</p>
 
     <footer class="reader-bottom">
-      <span>{{ modeLabel }}</span>
+      <span class="reader-chapter-name" :title="chapterTitle">{{ chapterTitle }}</span>
       <div class="reader-progress"><i :style="{ width: `${progressPercent}%` }" /></div>
       <span>{{ pageLabel }}</span>
     </footer>
@@ -1278,7 +1465,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
       <div class="reader-tabs">
-        <button :class="{ active: drawerTab === 'toc' }" @click="drawerTab = 'toc'">目录</button>
+        <button :class="{ active: drawerTab === 'toc' }" @click="drawerTab = 'toc'; scrollTocToCurrent()">目录</button>
         <button :class="{ active: drawerTab === 'bookmarks' }" @click="drawerTab = 'bookmarks'; loadBookmarks()">
           书签<span v-if="bookmarks.length">{{ bookmarks.length }}</span>
         </button>
@@ -1287,7 +1474,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div v-if="drawerTab === 'toc'" class="reader-toc-list">
+      <div v-if="drawerTab === 'toc'" ref="tocListRef" class="reader-toc-list">
         <button
           v-for="chapter in chapters"
           :key="chapter.index"

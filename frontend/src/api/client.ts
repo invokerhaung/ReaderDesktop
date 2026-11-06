@@ -399,15 +399,16 @@ export const api = {
   chapterCacheStatus: (id: string) =>
     request<ChapterCacheJob>(`/api/books/cache/status?id=${encodeURIComponent(id)}`),
 
-  prefetchChapters: (url: string, index: number) =>
+  prefetchChapters: (url: string, index: number, chapterUrl?: string) =>
     request<{ started: boolean; job?: ChapterCacheJob }>('/api/books/prefetch', {
       method: 'POST',
-      body: JSON.stringify({ url, index }),
+      body: JSON.stringify({ url, index, chapterUrl }),
     }),
 
-  content: (url: string, index: number, options: { refresh?: boolean } = {}) => {
+  content: (url: string, index: number, options: { refresh?: boolean; chapterUrl?: string } = {}) => {
     const params = new URLSearchParams({ url, index: String(index) })
     if (options.refresh) params.set('refresh', '1')
+    if (options.chapterUrl) params.set('chapterUrl', options.chapterUrl)
     return request<Content>(`/api/books/content?${params.toString()}`)
   },
 
@@ -481,10 +482,10 @@ export const api = {
       body: JSON.stringify({ fromUrl, toUrl, sourceKey }),
     }),
 
-  saveProgress: (url: string, index: number, position?: number) =>
+  saveProgress: (url: string, index: number, position?: number, chapterUrl?: string) =>
     request<{ url: string; index: number; position?: number }>('/api/books/progress', {
       method: 'PUT',
-      body: JSON.stringify({ url, index, position }),
+      body: JSON.stringify({ url, index, position, chapterUrl }),
     }),
 
   bookmarks: (url: string) =>

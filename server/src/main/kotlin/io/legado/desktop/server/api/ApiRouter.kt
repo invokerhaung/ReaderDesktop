@@ -743,7 +743,13 @@ class ApiRouter(private val context: ServerContext) {
     private fun prefetchChapters(body: String): ApiPayload {
         val obj = JsonParser.parseString(body).asJsonObject
         val url = obj.get("url")?.asString ?: error("缺少 url")
-        val index = obj.get("index")?.asInt ?: 0
+        val requested = obj.get("index")?.asInt ?: 0
+        val chapterUrl = obj.stringOrNull("chapterUrl")
+        val index = if (!chapterUrl.isNullOrBlank()) {
+            context.bookRepo.chapterIndexByUrl(url, chapterUrl) ?: requested
+        } else {
+            requested
+        }
         val job = chapterCacheService.startPrefetch(url, index)
         return ok(mapOf("started" to (job != null), "job" to job?.toJson()))
     }
@@ -773,7 +779,14 @@ class ApiRouter(private val context: ServerContext) {
 
     private fun content(params: Map<String, List<String>>): ApiPayload {
         val bookUrl = params["url"]?.firstOrNull() ?: error("缺少 url")
-        val index = params["index"]?.firstOrNull()?.toIntOrNull() ?: 0
+        val requestedIndex = params["index"]?.firstOrNull()?.toIntOrNull() ?: 0
+        // 目录可能已在别处刷新，URL 是比下标更稳定的章节标识
+        val chapterUrl = params["chapterUrl"]?.firstOrNull()
+        val index = if (!chapterUrl.isNullOrBlank()) {
+            context.bookRepo.chapterIndexByUrl(bookUrl, chapterUrl) ?: requestedIndex
+        } else {
+            requestedIndex
+        }
         val book = context.bookRepo.get(bookUrl) ?: error("书籍不在书架")
         val chapter = context.bookRepo.getChapter(bookUrl, index) ?: error("章节不存在")
         val cacheKey = "$bookUrl#$index"
@@ -787,8 +800,13 @@ class ApiRouter(private val context: ServerContext) {
         }
         if (document == null) {
             val source = context.findSource(bookUrl) ?: error("找不到对应书源")
+            // 章节最后一页的“下一页”指向下一章，用它作为翻页终点，避免把后续章节拼进来
+            val nextChapterUrl = context.bookRepo.chapterUrlAt(bookUrl, chapter.index + 1)
+                ?: context.bookRepo.chapterUrlAt(bookUrl, 0)
             val fetched = runCatching {
-                runBlocking { SourceEngine(source).contentDocument(book, chapter) }
+                runBlocking {
+                    SourceEngine(source).contentDocument(book, chapter, nextChapterUrl = nextChapterUrl)
+                }
             }
             document = fetched.getOrNull()
             if (document == null && !refresh && cacheEnabled) {
@@ -953,7 +971,13 @@ class ApiRouter(private val context: ServerContext) {
                 ?: error("书源已被删除")
             val fetched = runBlocking {
                 withTimeout(90_000) {
-                    SourceEngine(source).contentDocument(session.book, chapter)
+                    val nextChapterUrl = session.chapters.getOrNull(index + 1)?.url
+                        ?: session.chapters.firstOrNull()?.url
+                    SourceEngine(source).contentDocument(
+                        session.book,
+                        chapter,
+                        nextChapterUrl = nextChapterUrl,
+                    )
                 }
             }
             session.contentCache[index] = fetched
@@ -1282,8 +1306,15 @@ class ApiRouter(private val context: ServerContext) {
         val url = obj.get("url")?.asString ?: error("缺少 url")
         val index = obj.get("index")?.asInt ?: 0
         val position = obj.longOrNull("position")
-        context.bookRepo.updateProgress(url, index, position)
-        return ok(mapOf("url" to url, "index" to index, "position" to position))
+        val chapterUrl = obj.stringOrNull("chapterUrl")
+        // 目录可能插入/删除章节导致下标变化，URL 存在时以 URL 解析出的下标为准
+        val resolved = if (!chapterUrl.isNullOrBlank()) {
+            context.bookRepo.chapterIndexByUrl(url, chapterUrl) ?: index
+        } else {
+            index
+        }
+        context.bookRepo.updateProgress(url, resolved, position)
+        return ok(mapOf("url" to url, "index" to resolved, "position" to position))
     }
 
     /** 浮窗是桌面壳里的独立原生窗口，能力通过 WebView 桥转发。 */

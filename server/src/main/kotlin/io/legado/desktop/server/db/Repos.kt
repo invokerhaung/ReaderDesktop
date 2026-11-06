@@ -285,6 +285,27 @@ class BookRepo(private val database: Database) {
         }
     }
 
+    /** 目录可能插入新章节，进度以章节 URL 为准时用它找回正确下标。 */
+    fun chapterIndexByUrl(bookUrl: String, chapterUrl: String): Int? = database.use { connection ->
+        connection.prepareStatement(
+            "SELECT idx FROM chapters WHERE book_url = ? AND url = ? LIMIT 1"
+        ).use { statement ->
+            statement.setString(1, bookUrl)
+            statement.setString(2, chapterUrl)
+            statement.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else null }
+        }
+    }
+
+    fun chapterUrlAt(bookUrl: String, index: Int): String? = database.use { connection ->
+        connection.prepareStatement(
+            "SELECT url FROM chapters WHERE book_url = ? AND idx = ?"
+        ).use { statement ->
+            statement.setString(1, bookUrl)
+            statement.setInt(2, index)
+            statement.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+        }
+    }
+
     fun saveChapterResource(bookUrl: String, index: Int, resourceUrl: String) {
         database.use { connection ->
             connection.prepareStatement(
@@ -302,6 +323,16 @@ class BookRepo(private val database: Database) {
         database.use { connection ->
             connection.autoCommit = false
             try {
+                val previous = HashMap<String, Int>()
+                connection.prepareStatement("SELECT idx, url FROM chapters WHERE book_url = ?").use { statement ->
+                    statement.setString(1, bookUrl)
+                    statement.executeQuery().use { rs ->
+                        while (rs.next()) previous[rs.getString("url")] = rs.getInt("idx")
+                    }
+                }
+                // 目录插入/删除会让 URL 对应下标变化，旧下标缓存的正文必须作废
+                val mappingChanged = previous.size != chapters.size ||
+                    chapters.any { previous[it.url] != it.index }
                 connection.prepareStatement("DELETE FROM chapters WHERE book_url = ?").use { statement ->
                     statement.setString(1, bookUrl)
                     statement.executeUpdate()
@@ -319,6 +350,12 @@ class BookRepo(private val database: Database) {
                         statement.addBatch()
                     }
                     statement.executeBatch()
+                }
+                if (mappingChanged) {
+                    connection.prepareStatement("DELETE FROM chapter_cache WHERE book_url = ?").use { statement ->
+                        statement.setString(1, bookUrl)
+                        statement.executeUpdate()
+                    }
                 }
                 connection.commit()
             } catch (e: Exception) {

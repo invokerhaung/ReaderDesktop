@@ -96,34 +96,29 @@ html[data-float-window] body {
   cursor: pointer;
 }
 
-.float-progress {
+.float-chapter {
   display: flex;
   flex: none;
-  gap: 8px;
   align-items: center;
+  justify-content: center;
   height: 20px;
+  padding: 0 4px;
+  overflow: hidden;
   color: inherit;
-  font-family: var(--font-mono, ui-monospace);
-  font-size: 10px;
+  font-family: var(--font-ui, system-ui);
+  font-size: 11px;
   opacity: 0.62;
+  white-space: nowrap;
 }
 
-.float-progress.top {
+.float-chapter.top {
   order: -1;
 }
 
-.float-progress i {
-  flex: 1;
-  height: 2px;
+.float-chapter span {
   overflow: hidden;
-  border-radius: 2px;
-  background: color-mix(in srgb, currentColor 22%, transparent);
-}
-
-.float-progress b {
-  display: block;
-  height: 100%;
-  background: color-mix(in srgb, currentColor 72%, transparent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .float-menu {

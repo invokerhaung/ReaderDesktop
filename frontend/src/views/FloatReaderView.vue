@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { api, type Book, type Chapter, type Content } from '../api/client'
 import { isImageBook, isVideoBook } from '../api/bookType'
 import {
+  chapterListKey,
   FLOAT_DEFAULTS,
   FLOAT_PREFS_CHANNEL,
   FLOAT_SYNC_CHANNEL,
@@ -13,6 +14,8 @@ import {
   type FloatPrefs,
   type FloatPrefsMessage,
   type FloatProgressMessage,
+  type FloatSyncMessage,
+  type FloatSyncRequest,
 } from '../api/floatReader'
 
 interface FloatSegment {
@@ -36,6 +39,9 @@ const route = useRoute()
 const prefs = reactive<FloatPrefs>({ ...FLOAT_DEFAULTS })
 const book = ref<Book | null>(null)
 const chapters = ref<Chapter[]>([])
+const tocKey = computed(() => chapterListKey(chapters.value))
+let tocReloading = false
+let tocSyncAttempts = 0
 const chapterIndex = ref(0)
 const contentBlocks = ref<string[]>([])
 const pages = ref<FloatPage[]>([[]])
@@ -63,6 +69,15 @@ let lastLocalProgressAt = 0
 let suppressRemoteUntil = 0
 let remoteBusy = false
 let dragging = false
+let loadSeq = 0
+let pendingRemote: FloatProgressMessage | null = null
+let initialSyncPending = false
+let initialSyncTimer: number | undefined
+let syncRetryTimer: number | undefined
+/** 最近一次已对齐的主窗口切章时刻，随浮窗进度回传，主窗口据此判断浮窗是否已看到新章。 */
+let mainChangeAt = 0
+/** 正文实际加载成功的章节，切章失败时据此回退。 */
+const displayedIndex = ref(0)
 
 const chapterTitle = computed(() => chapters.value[chapterIndex.value]?.title ?? book.value?.name ?? '')
 
@@ -75,12 +90,6 @@ const effectiveFontSize = computed(() => {
 const shellStyle = computed(() => floatPageStyle(prefs, effectiveFontSize.value))
 
 const currentPage = computed<FloatPage>(() => pages.value[pageIndex.value] ?? [])
-
-const progressPercent = computed(() => {
-  if (!chapters.value.length) return 0
-  const within = pages.value.length ? (pageIndex.value + 1) / pages.value.length : 0
-  return Math.min(100, Math.max(0, ((chapterIndex.value + within) / chapters.value.length) * 100))
-})
 
 /** 章内位置（千分比），与主窗口宽度/分页无关。 */
 const chapterPermille = computed(() => {
@@ -263,7 +272,11 @@ async function loadChapter(
   options: { page?: number | null; percent?: number | null; notify?: boolean } = {},
 ) {
   if (!book.value || index < 0 || index >= chapters.value.length) return
+  const seq = ++loadSeq
+  const previousIndex = displayedIndex.value
   const local = options.notify !== false
+  // 上一章延迟保存的计时器不能在切章后写入新章节的错误位置
+  window.clearTimeout(saveTimer)
   chapterIndex.value = index
   loadingContent.value = true
   loadError.value = ''
@@ -273,11 +286,17 @@ async function loadChapter(
     broadcastChapterStart(index)
   }
   try {
-    const data = await api.content(book.value.bookUrl, index)
+    const data = await api.content(book.value.bookUrl, index, {
+      chapterUrl: chapters.value[index]?.url,
+    })
+    // 期间又发生了新的切章请求，旧响应直接丢弃，避免正文与目录错位
+    if (seq !== loadSeq) return
     contentBlocks.value = textBlocks(data)
     pageIndex.value = 0
     await nextTick()
+    if (seq !== loadSeq) return
     await paginate(null)
+    if (seq !== loadSeq) return
     if (typeof options.percent === 'number' && Number.isFinite(options.percent)) {
       pageIndex.value = clamp(
         Math.round(options.percent * Math.max(0, pages.value.length - 1)),
@@ -287,14 +306,24 @@ async function loadChapter(
     } else if (typeof options.page === 'number' && Number.isFinite(options.page)) {
       pageIndex.value = clamp(Math.round(options.page), 0, pages.value.length - 1)
     }
+    displayedIndex.value = index
     if (options.notify !== false) afterChange()
     if (book.value) {
-      void api.prefetchChapters(book.value.bookUrl, index).catch(() => undefined)
+      void api
+        .prefetchChapters(book.value.bookUrl, index, chapters.value[index]?.url)
+        .catch(() => undefined)
     }
   } catch (e) {
+    if (seq !== loadSeq) return
     loadError.value = e instanceof Error ? e.message : String(e)
+    if (chapterIndex.value !== previousIndex && contentBlocks.value.length) {
+      chapterIndex.value = previousIndex
+    }
   } finally {
-    loadingContent.value = false
+    if (seq === loadSeq) {
+      loadingContent.value = false
+      flushPendingRemote()
+    }
   }
 }
 
@@ -343,7 +372,16 @@ async function init() {
     await loadChapter(index, { ...options, notify: false })
     currentTop.value = prefs.alwaysOnTop
     await refreshWindowState()
-    afterChange()
+    // 初始位置来自数据库，可能落后于主窗口。先向主窗口要一次实时进度，
+    // 拿不到（主窗口已关闭）再把自己的状态写回，避免用旧章节覆盖主窗口。
+    initialSyncPending = true
+    requestSync()
+    window.clearTimeout(initialSyncTimer)
+    initialSyncTimer = window.setTimeout(() => {
+      if (!initialSyncPending) return
+      initialSyncPending = false
+      afterChange()
+    }, 600)
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -366,6 +404,7 @@ function flushProgress() {
     url: book.value.bookUrl,
     index: chapterIndex.value,
     position: chapterPermille.value,
+    chapterUrl: chapters.value[chapterIndex.value]?.url,
   })
   try {
     void fetch('/api/books/progress', {
@@ -383,8 +422,14 @@ function saveProgressSoon() {
   window.clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
     if (!book.value) return
+    // chapterIndex 可能已开始切换，以 URL 让服务端解析正确下标
     void api
-      .saveProgress(book.value.bookUrl, chapterIndex.value, chapterPermille.value)
+      .saveProgress(
+        book.value.bookUrl,
+        chapterIndex.value,
+        chapterPermille.value,
+        chapters.value[chapterIndex.value]?.url,
+      )
       .catch(() => undefined)
   }, 260)
 }
@@ -402,6 +447,9 @@ function postProgress(index: number, page: number, percent: number, title: strin
     percent,
     chapterTitle: title,
     at,
+    mainChangeAt,
+    chapterUrl: chapters.value[index]?.url,
+    tocKey: tocKey.value,
   }
   syncChannel?.postMessage(message)
 }
@@ -448,17 +496,71 @@ function turnPage(delta: number) {
   afterChange()
 }
 
+/** 主窗口目录版本不同：重新拉取目录，并按 URL 重新映射当前章节。 */
+async function reloadTocForSync(): Promise<boolean> {
+  if (!book.value || tocReloading) return false
+  tocReloading = true
+  try {
+    const displayedUrl = chapters.value[displayedIndex.value]?.url
+    const currentUrl = chapters.value[chapterIndex.value]?.url
+    const list = await api.chapters(book.value.bookUrl)
+    if (!list.length) return false
+    chapters.value = list
+    const remap = (url?: string) => (url ? list.findIndex((chapter) => chapter.url === url) : -1)
+    const displayed = remap(displayedUrl)
+    const current = remap(currentUrl)
+    if (displayed >= 0) displayedIndex.value = displayed
+    if (current >= 0) chapterIndex.value = current
+    return true
+  } catch {
+    return false
+  } finally {
+    tocReloading = false
+  }
+}
+
 async function onRemoteProgress(message: FloatProgressMessage) {
   if (!book.value || message.bookUrl !== book.value.bookUrl) return
-  if (remoteBusy || loadingContent.value) return
-  // 本地切章期间，主窗口旧的“当前章节”进度不能把浮窗拉回去
-  if (Date.now() < suppressRemoteUntil) return
+  if (initialSyncPending) {
+    // 主窗口已经应答，初始化位置以主窗口为准，不再回写
+    initialSyncPending = false
+    window.clearTimeout(initialSyncTimer)
+  }
   // 忽略主窗口迟到的旧进度，避免刚翻到下一页又被拉回上一页
   if (message.at && message.at < lastLocalProgressAt) return
+  // 本地切章期间，主窗口旧的“当前章节”进度不能把浮窗拉回去；稍后再主动要一次最新进度
+  if (Date.now() < suppressRemoteUntil) {
+    scheduleSyncRequest()
+    return
+  }
+  // 本地正在加载时不能丢消息，先记录最新的，等加载完再对齐
+  if (remoteBusy || loadingContent.value) {
+    if (!pendingRemote || (message.at ?? 0) >= (pendingRemote.at ?? 0)) {
+      pendingRemote = message
+    }
+    return
+  }
+  // 目录版本不同时先刷新目录，避免旧下标对到错误章节
+  if (message.tocKey && message.tocKey !== tocKey.value) {
+    const reloaded = await reloadTocForSync()
+    if (!reloaded || (message.tocKey && message.tocKey !== tocKey.value)) {
+      if (tocSyncAttempts < 3) {
+        tocSyncAttempts++
+        requestSync()
+      }
+      return
+    }
+  }
+  tocSyncAttempts = 0
+  const targetIndex =
+    message.chapterUrl && chapters.value.length
+      ? chapters.value.findIndex((chapter) => chapter.url === message.chapterUrl)
+      : message.index
+  if (targetIndex < 0 || targetIndex >= chapters.value.length) return
   remoteBusy = true
   try {
-    if (message.index !== chapterIndex.value) {
-      await loadChapter(message.index, {
+    if (targetIndex !== chapterIndex.value) {
+      await loadChapter(targetIndex, {
         page: typeof message.percent === 'number' ? undefined : message.page ?? undefined,
         percent: typeof message.percent === 'number' ? message.percent : undefined,
         notify: false,
@@ -472,9 +574,44 @@ async function onRemoteProgress(message: FloatProgressMessage) {
     } else if (typeof message.page === 'number') {
       pageIndex.value = clamp(message.page, 0, pages.value.length - 1)
     }
+    if (chapterIndex.value === targetIndex && typeof message.at === 'number') {
+      mainChangeAt = Math.max(mainChangeAt, message.at)
+    }
   } finally {
     remoteBusy = false
+    flushPendingRemote()
   }
+}
+
+function flushPendingRemote() {
+  const next = pendingRemote
+  if (!next) return
+  if (loadingContent.value || remoteBusy) return
+  pendingRemote = null
+  if (next.at && next.at < lastLocalProgressAt) return
+  void onRemoteProgress(next)
+}
+
+/** 浮窗重新获得焦点时向主窗口索要最新进度，修复隐藏期间漏收的同步。 */
+function requestSync() {
+  if (!book.value || !chapters.value.length) return
+  syncChannel?.postMessage({
+    type: 'sync-request',
+    source: 'float',
+    bookUrl: book.value.bookUrl,
+    at: Date.now(),
+  } satisfies FloatSyncRequest)
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') requestSync()
+}
+
+/** 本地切章窗口期丢弃了主窗口消息时，等窗口结束后再要一次状态。 */
+function scheduleSyncRequest() {
+  window.clearTimeout(syncRetryTimer)
+  const delay = Math.max(80, suppressRemoteUntil - Date.now() + 80)
+  syncRetryTimer = window.setTimeout(requestSync, delay)
 }
 
 async function toggleTop() {
@@ -495,7 +632,12 @@ async function backToMain() {
   menu.open = false
   window.clearTimeout(saveTimer)
   if (book.value) {
-    await api.saveProgress(book.value.bookUrl, chapterIndex.value, chapterPermille.value).catch(() => undefined)
+    await api.saveProgress(
+      book.value.bookUrl,
+      chapterIndex.value,
+      chapterPermille.value,
+      chapters.value[chapterIndex.value]?.url,
+    ).catch(() => undefined)
   }
   broadcastProgress()
   try {
@@ -509,7 +651,12 @@ async function openSettings() {
   menu.open = false
   window.clearTimeout(saveTimer)
   if (book.value) {
-    await api.saveProgress(book.value.bookUrl, chapterIndex.value, chapterPermille.value).catch(() => undefined)
+    await api.saveProgress(
+      book.value.bookUrl,
+      chapterIndex.value,
+      chapterPermille.value,
+      chapters.value[chapterIndex.value]?.url,
+    ).catch(() => undefined)
   }
   broadcastProgress()
   try {
@@ -523,7 +670,12 @@ async function hideWindow() {
   menu.open = false
   window.clearTimeout(saveTimer)
   if (book.value) {
-    await api.saveProgress(book.value.bookUrl, chapterIndex.value, chapterPermille.value).catch(() => undefined)
+    await api.saveProgress(
+      book.value.bookUrl,
+      chapterIndex.value,
+      chapterPermille.value,
+      chapters.value[chapterIndex.value]?.url,
+    ).catch(() => undefined)
   }
   broadcastProgress()
   try {
@@ -625,7 +777,7 @@ async function loadPrefs() {
 function setupChannels() {
   if (typeof BroadcastChannel === 'undefined') return
   syncChannel = new BroadcastChannel(FLOAT_SYNC_CHANNEL)
-  syncChannel.onmessage = (event: MessageEvent<FloatProgressMessage>) => {
+  syncChannel.onmessage = (event: MessageEvent<FloatSyncMessage>) => {
     const message = event.data
     if (!message || message.type !== 'progress' || message.source !== 'reader') return
     void onRemoteProgress(message)
@@ -652,6 +804,7 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('wheel', onWheel, { passive: false })
   window.addEventListener('pointerup', onPointerUp)
+  document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('beforeunload', flushProgress)
   window.addEventListener('pagehide', flushProgress)
   resizeObserver = new ResizeObserver(() => scheduleRepaginate())
@@ -665,9 +818,12 @@ onBeforeUnmount(() => {
   window.clearTimeout(saveTimer)
   window.clearTimeout(toastTimer)
   window.clearTimeout(repaginateTimer)
+  window.clearTimeout(initialSyncTimer)
+  window.clearTimeout(syncRetryTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('wheel', onWheel)
   window.removeEventListener('pointerup', onPointerUp)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('beforeunload', flushProgress)
   window.removeEventListener('pagehide', flushProgress)
   resizeObserver?.disconnect()
@@ -706,9 +862,13 @@ onBeforeUnmount(() => {
       <p v-else-if="!currentPage.length" class="float-status">本章暂无内容</p>
     </div>
 
-    <div v-if="prefs.progress !== 'hidden'" class="float-progress" :class="prefs.progress">
-      <i><b :style="{ width: `${progressPercent}%` }" /></i>
-      <span>{{ Math.round(progressPercent) }}%</span>
+    <div
+      v-if="prefs.progress !== 'hidden'"
+      class="float-chapter"
+      :class="prefs.progress"
+      :title="chapterTitle"
+    >
+      <span>{{ chapterTitle }}</span>
     </div>
 
     <div

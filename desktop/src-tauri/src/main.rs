@@ -133,17 +133,20 @@ fn float_runtime(app: &tauri::AppHandle) -> Option<Arc<FloatRuntime>> {
 }
 
 fn main() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+    // 调试壳允许与正式安装版并行运行，方便不改安装包直接验证改动
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
+    builder
         .setup(|app| {
-            let data_dir = app.path().app_data_dir()?;
+            let data_dir = resolve_data_dir(app.handle())?;
             fs::create_dir_all(&data_dir)?;
             let float_runtime = Arc::new(FloatRuntime::load(data_dir.join("float-window.json")));
             app.manage(float_runtime.clone());
@@ -915,7 +918,7 @@ fn start_server(
     app: &tauri::AppHandle,
     bridge: Option<&WebViewBridge>,
 ) -> Result<ServerProcess, Box<dyn Error>> {
-    let data_dir = app.path().app_data_dir()?;
+    let data_dir = resolve_data_dir(app)?;
     fs::create_dir_all(&data_dir)?;
     let resources = app.path().resource_dir()?;
     let java = locate_java(&resources)?;
@@ -1043,6 +1046,16 @@ fn locate_java(resources: &Path) -> Result<PathBuf, Box<dyn Error>> {
         }
     }
     Ok(PathBuf::from("java"))
+}
+
+fn resolve_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn Error>> {
+    #[cfg(debug_assertions)]
+    if let Ok(value) = std::env::var("LEGADO_DATA_DIR") {
+        if !value.trim().is_empty() {
+            return Ok(PathBuf::from(value));
+        }
+    }
+    Ok(app.path().app_data_dir()?)
 }
 
 fn repo_root() -> Option<PathBuf> {

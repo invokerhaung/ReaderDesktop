@@ -129,6 +129,19 @@
   transition: opacity 200ms ease, transform 200ms ease;
 }
 
+.reader-chapter-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 44%;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--r-text) 72%, transparent);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .reader-progress {
   flex: 1;
   height: 2px;

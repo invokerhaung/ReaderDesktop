@@ -92,7 +92,40 @@ export interface FloatProgressMessage {
   chapterTitle?: string
   /** 发送时刻（Date.now），用于过滤另一端迟到的旧进度，避免翻页被拉回。 */
   at?: number
+  /** 本轮进度是否由切章产生。 */
+  chapterStart?: boolean
+  /** 章节地址。目录新增/插入章节导致下标变化时，用它跨窗口定位同一章。 */
+  chapterUrl?: string
+  /** 目录指纹。两端不一致说明目录版本不同，需要先重新加载目录再同步。 */
+  tocKey?: string
+  /** 浮窗：最近一次收到的、主窗口切章时刻。主窗口据此忽略浮窗尚未看到新章节时发出的旧进度。 */
+  mainChangeAt?: number
 }
+
+/** 目录指纹：长度 + 首尾及四分位章节 URL，用来发现插入/删除/重排。 */
+export function chapterListKey(chapters: { url: string }[]): string {
+  if (!chapters.length) return '0'
+  const pick = (index: number) =>
+    chapters[Math.min(chapters.length - 1, Math.max(0, index))]?.url ?? ''
+  return [
+    chapters.length,
+    pick(0),
+    pick(chapters.length >> 2),
+    pick(chapters.length >> 1),
+    pick((chapters.length * 3) >> 2),
+    pick(chapters.length - 1),
+  ].join('|')
+}
+
+/** 浮窗重新获得焦点时向主窗口索要当前进度，修复隐藏期间漏收的同步消息。 */
+export interface FloatSyncRequest {
+  type: 'sync-request'
+  source: 'reader' | 'float'
+  bookUrl?: string
+  at: number
+}
+
+export type FloatSyncMessage = FloatProgressMessage | FloatSyncRequest
 
 export interface FloatPrefsMessage {
   type: 'prefs'
